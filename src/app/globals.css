@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@keyframes plus-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes plus-glow {
+  0%,
+  100% {
+    filter: saturate(1);
+  }
+  50% {
+    filter: saturate(1.16);
+  }
+}
+
+@keyframes pro-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pro-line-drift {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(12deg);
+  }
+  50% {
+    transform: translate3d(-10px, 8px, 0) rotate(12deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(12deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  main[data-template="plus"] aside,
+  main[data-template="plus"] section > section,
+  main[data-template="plus"] article {
+    animation: plus-rise 520ms ease both;
+  }
+
+  main[data-template="plus"] section > section:nth-child(2) {
+    animation-delay: 70ms;
+  }
+
+  main[data-template="plus"] section > section:nth-child(3) {
+    animation-delay: 120ms;
+  }
+
+  main[data-template="plus"] a,
+  main[data-template="plus"] article,
+  main[data-template="plus"] img {
+    transition:
+      transform 180ms ease,
+      box-shadow 180ms ease,
+      filter 180ms ease;
+  }
+
+  main[data-template="plus"] a:hover,
+  main[data-template="plus"] article:hover,
+  main[data-template="plus"] img:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 32px rgba(17, 24, 39, 0.1);
+  }
+
+  main[data-template="plus"] aside > section:first-child {
+    animation:
+      plus-rise 520ms ease both,
+      plus-glow 6s ease-in-out infinite;
+  }
+
+  main[data-template="pro"] header,
+  main[data-template="pro"] h1,
+  main[data-template="pro"] h2,
+  main[data-template="pro"] section,
+  main[data-template="pro"] article {
+    animation: pro-reveal 720ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+
+  main[data-template="pro"] h1 {
+    animation-delay: 120ms;
+  }
+
+  main[data-template="pro"] section:nth-of-type(2) {
+    animation-delay: 90ms;
+  }
+
+  main[data-template="pro"] section:nth-of-type(3) {
+    animation-delay: 150ms;
+  }
+
+  main[data-template="pro"] a,
+  main[data-template="pro"] img,
+  main[data-template="pro"] article {
+    transition:
+      transform 260ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      border-color 260ms ease,
+      box-shadow 260ms ease,
+      opacity 260ms ease;
+  }
+
+  main[data-template="pro"] a:hover,
+  main[data-template="pro"] article:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 20px 48px rgba(17, 24, 39, 0.12);
+  }
+
+  main[data-template="pro"] img:hover {
+    transform: scale(1.015);
+  }
+
+  main[data-template="pro"] section:first-child > div:nth-child(3) {
+    animation: pro-line-drift 16s ease-in-out infinite;
+  }
+}

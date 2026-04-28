@@ -1,4 +1,11 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# QR Business Card Platform
+
+Small businesses can publish one-page web business cards under subdomains and attach QR codes to cars, doors, counters, business cards, and ads.
+
+Architecture and implementation notes:
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Technical Work Plan](docs/TECHNICAL_PLAN.md)
 
 ## Getting Started
 
