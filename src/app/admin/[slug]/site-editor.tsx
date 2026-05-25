@@ -82,7 +82,10 @@ export function AdminSiteEditor({ initialSite, slug }: AdminSiteEditorProps) {
     | FaqBlock
     | undefined;
 
-  const publicUrl = useMemo(() => `https://${slug}.bm.com`, [slug]);
+  const [origin] = useState(() =>
+    typeof window === "undefined" ? "http://127.0.0.1:3000" : window.location.origin,
+  );
+  const publicUrl = useMemo(() => `${origin}/${slug}`, [origin, slug]);
 
   function updateSite(nextSite: PublishedSite) {
     setSite(nextSite);

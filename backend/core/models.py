@@ -1,4 +1,5 @@
 from django.db import models
+import secrets
 
 
 class TimeStampedModel(models.Model):
@@ -23,6 +24,9 @@ class Tenant(TimeStampedModel):
 
     name = models.CharField(max_length=160)
     slug = models.SlugField(max_length=80, unique=True)
+    owner_token = models.CharField(max_length=80, unique=True, blank=True)
+    owner_contact = models.CharField(max_length=180, blank=True)
+    owner_recovery_code = models.CharField(max_length=12, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     plan = models.CharField(max_length=20, choices=Plan.choices, default=Plan.ODDIY)
 
@@ -31,6 +35,14 @@ class Tenant(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.owner_token:
+            self.owner_token = secrets.token_urlsafe(32)
+        if not self.owner_recovery_code:
+            self.owner_recovery_code = secrets.token_hex(3).upper()
+
+        super().save(*args, **kwargs)
 
 
 class Domain(TimeStampedModel):
@@ -86,3 +98,21 @@ class Site(TimeStampedModel):
     def __str__(self) -> str:
         return self.title
 
+
+class SiteEvent(TimeStampedModel):
+    class EventType(models.TextChoices):
+        VIEW = "view", "View"
+        CLICK = "click", "Click"
+
+    site = models.ForeignKey(Site, related_name="events", on_delete=models.CASCADE)
+    event_type = models.CharField(max_length=20, choices=EventType.choices)
+    target = models.CharField(max_length=80, blank=True)
+    user_agent = models.TextField(blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["site", "event_type", "created_at"], name="core_siteev_site_id_28a21d_idx"),
+            models.Index(fields=["site", "target", "created_at"], name="core_siteev_site_id_6e439b_idx"),
+        ]
+        ordering = ["-created_at"]

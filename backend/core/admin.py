@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Domain, Site, Tenant
+from .models import Domain, Site, SiteEvent, Tenant
 
 
 @admin.register(Tenant)
@@ -24,3 +24,9 @@ class SiteAdmin(admin.ModelAdmin):
     list_filter = ("template_key", "status")
     search_fields = ("title", "tenant__name", "tenant__slug")
 
+
+@admin.register(SiteEvent)
+class SiteEventAdmin(admin.ModelAdmin):
+    list_display = ("site", "event_type", "target", "ip_address", "created_at")
+    list_filter = ("event_type", "target")
+    search_fields = ("site__title", "site__tenant__slug", "target")

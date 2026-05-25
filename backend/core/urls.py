@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import DomainViewSet, SiteViewSet, TenantViewSet
+from .views import DomainViewSet, HealthView, SiteViewSet, TenantViewSet
 
 
 router = DefaultRouter()
@@ -10,6 +10,6 @@ router.register("domains", DomainViewSet, basename="domain")
 router.register("sites", SiteViewSet, basename="site")
 
 urlpatterns = [
+    path("health/", HealthView.as_view(), name="health"),
     path("", include(router.urls)),
 ]
-

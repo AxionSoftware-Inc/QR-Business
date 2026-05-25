@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { AdminSiteEditor } from "@/app/admin/[slug]/site-editor";
+import { isAdminAuthenticated } from "@/modules/admin/auth";
 import { findPublishedSiteBySlugAsync } from "@/modules/sites/site-repository";
 import { findTenantBySlugAsync } from "@/modules/tenants/tenant-repository";
 
@@ -10,7 +12,13 @@ type AdminSitePageProps = {
   }>;
 };
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminSitePage({ params }: AdminSitePageProps) {
+  if (!(await isAdminAuthenticated())) {
+    redirect("/admin/login");
+  }
+
   const { slug } = await params;
   const tenant = await findTenantBySlugAsync(slug);
 
@@ -39,7 +47,7 @@ export default async function AdminSitePage({ params }: AdminSitePageProps) {
           </div>
           <Link
             className="flex min-h-11 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
-            href={`/site/${tenant.slug}`}
+            href={`/${tenant.slug}`}
             target="_blank"
           >
             Public sahifa

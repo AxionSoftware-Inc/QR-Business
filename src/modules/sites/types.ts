@@ -172,6 +172,15 @@ export type SiteBlock =
 export type PublishedSite = {
   id: string;
   tenantId: string;
+  tenantSlug?: string;
+  ownerToken?: string;
+  ownerContact?: string;
+  ownerRecoveryCode?: string;
+  domains?: Array<{
+    hostname: string;
+    status: "pending" | "verified" | "blocked";
+    type: "subdomain" | "custom";
+  }>;
   title: string;
   description: string;
   templateKey: "oddiy" | "plus" | "pro";

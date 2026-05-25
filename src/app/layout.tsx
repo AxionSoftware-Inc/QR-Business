@@ -13,8 +13,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "QR Business Card Platform",
-  description: "One-page business cards published under QR-ready subdomains.",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_BASE_URL ?? "http://127.0.0.1:3000",
+  ),
+  title: {
+    default: "QR Business Card Platform",
+    template: "%s",
+  },
+  description: "QR orqali ochiladigan bir sahifali biznes vizitkalar.",
 };
 
 export default function RootLayout({

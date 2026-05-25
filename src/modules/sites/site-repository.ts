@@ -1,5 +1,8 @@
 import { publishedSites } from "@/backend";
-import { findPublishedSiteBySlugFromBackend } from "@/modules/api/backend-client";
+import {
+  findPublishedSiteBySlugFromBackend,
+  listSitesFromBackend,
+} from "@/modules/api/backend-client";
 
 export function findPublishedSiteByTenantId(tenantId: string) {
   return (
@@ -11,6 +14,10 @@ export function findPublishedSiteByTenantId(tenantId: string) {
 
 export function listPublishedSites() {
   return publishedSites;
+}
+
+export async function listPublishedSitesAsync() {
+  return listSitesFromBackend();
 }
 
 export async function findPublishedSiteBySlugAsync(slug: string) {
