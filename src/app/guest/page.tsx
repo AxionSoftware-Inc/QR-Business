@@ -1,20 +1,11 @@
 import Link from "next/link";
+import { MarketingNavbar } from "@/shared/ui/marketing-navbar";
 
 export default function GuestEntryPage() {
   return (
     <main className="min-h-screen bg-[#f7f8fb] px-4 py-5 text-slate-950 sm:px-6">
       <div className="mx-auto flex min-h-[calc(100vh-2.5rem)] max-w-6xl flex-col">
-        <header className="flex items-center justify-between gap-4">
-          <Link className="text-lg font-semibold" href="/">
-            BM QR
-          </Link>
-          <Link
-            className="flex min-h-10 items-center rounded-md bg-white px-4 text-sm font-semibold text-slate-800 ring-1 ring-black/10"
-            href="/login"
-          >
-            Google login
-          </Link>
-        </header>
+        <MarketingNavbar />
 
         <section className="grid flex-1 items-center gap-8 py-10 lg:grid-cols-[1fr_420px]">
           <div>
