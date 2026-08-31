@@ -120,6 +120,7 @@ REST_FRAMEWORK = {
         "public_read": os.getenv("THROTTLE_PUBLIC_READ", "1200/hour"),
         "analytics_write": os.getenv("THROTTLE_ANALYTICS_WRITE", "600/hour"),
         "qr_redirect": os.getenv("THROTTLE_QR_REDIRECT", "1200/hour"),
+        "auth": os.getenv("THROTTLE_AUTH", "60/hour"),
     },
 }
 
