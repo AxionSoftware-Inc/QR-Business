@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type React from "react";
 import { useEffect, useState } from "react";
 import { listV2Domains, listV2QRCodes, listV2Sites, type V2Domain, type V2QRCode, type V2Site } from "@/modules/api/v2-management-client";
 import { getCachedV2User, refreshV2Session } from "@/modules/auth/v2-session";
