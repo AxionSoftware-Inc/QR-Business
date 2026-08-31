@@ -1,5 +1,3 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 /node_modules
 /.pnp
@@ -12,6 +10,9 @@
 
 # testing
 /coverage
+.pytest_cache/
+.coverage
+htmlcov/
 
 # next.js
 /.next/
@@ -23,8 +24,11 @@
 # misc
 .DS_Store
 *.pem
+*.key
+*.crt
 
-# debug
+# logs and runtime output
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -32,8 +36,10 @@ yarn-error.log*
 dev-server*.log
 dev-next*.log
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files
+.env
+.env.*
+!.env.example
 
 # python
 __pycache__/
@@ -42,6 +48,11 @@ __pycache__/
 venv/
 db.sqlite3
 media/
+backend/media/
+
+# IDE
+.vscode/
+.idea/
 
 # vercel
 .vercel
