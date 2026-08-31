@@ -46,8 +46,6 @@ def _token_hash(raw_token):
 
 
 def _issue_access_token(user):
-    # We intentionally use only the short-lived access half of SimpleJWT.
-    # Long-lived browser sessions are opaque, revocable DB records below.
     refresh = RefreshToken.for_user(user)
     return str(refresh.access_token)
 
@@ -112,6 +110,7 @@ def _user_payload(user):
         "id": str(user.pk),
         "email": user.email,
         "name": user.get_full_name() or user.email or user.get_username(),
+        "is_staff": bool(user.is_staff),
         "memberships": [
             {
                 "tenant_id": str(membership.tenant_id),
@@ -147,10 +146,7 @@ def _resolve_google_user(claims):
 
     user = User.objects.filter(email__iexact=email).order_by("id").first()
     if not user:
-        user = User.objects.create_user(
-            username=_unique_username(email, subject),
-            email=email,
-        )
+        user = User.objects.create_user(username=_unique_username(email, subject), email=email)
         user.set_unusable_password()
 
     given_name = str(claims.get("given_name") or "")[:150]
@@ -168,12 +164,7 @@ def _resolve_google_user(claims):
     if changed:
         user.save()
 
-    Identity.objects.create(
-        user=user,
-        provider=Identity.Provider.GOOGLE,
-        subject=subject,
-        email=email,
-    )
+    Identity.objects.create(user=user, provider=Identity.Provider.GOOGLE, subject=subject, email=email)
     return user
 
 
@@ -187,33 +178,24 @@ class GoogleLoginView(APIView):
 
         client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
         if not client_id:
-            return Response(
-                {"detail": "Google authentication is not configured."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+            return Response({"detail": "Google authentication is not configured."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         credential = str(request.data.get("credential") or "").strip()
         if not credential:
             return Response({"detail": "credential is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            claims = google_id_token.verify_oauth2_token(
-                credential,
-                google_requests.Request(),
-                client_id,
-            )
+            claims = google_id_token.verify_oauth2_token(credential, google_requests.Request(), client_id)
             user = _resolve_google_user(claims)
         except ValueError:
             return Response({"detail": "Invalid Google credential."}, status=status.HTTP_401_UNAUTHORIZED)
 
         session, raw_token = _new_session(user)
-        response = Response(
-            {
-                "access": _issue_access_token(user),
-                "session_expires_at": session.expires_at.isoformat(),
-                "user": _user_payload(user),
-            }
-        )
+        response = Response({
+            "access": _issue_access_token(user),
+            "session_expires_at": session.expires_at.isoformat(),
+            "user": _user_payload(user),
+        })
         _set_session_cookie(response, raw_token)
         return response
 
@@ -235,12 +217,7 @@ class SessionRefreshView(APIView):
         session = (
             AuthSession.objects.select_for_update()
             .select_related("user")
-            .filter(
-                token_hash=_token_hash(raw_token),
-                revoked_at__isnull=True,
-                expires_at__gt=now,
-                user__is_active=True,
-            )
+            .filter(token_hash=_token_hash(raw_token), revoked_at__isnull=True, expires_at__gt=now, user__is_active=True)
             .first()
         )
         if not session:
@@ -253,13 +230,11 @@ class SessionRefreshView(APIView):
         session.save(update_fields=["revoked_at", "last_used_at"])
         new_session, new_raw_token = _new_session(session.user)
 
-        response = Response(
-            {
-                "access": _issue_access_token(session.user),
-                "session_expires_at": new_session.expires_at.isoformat(),
-                "user": _user_payload(session.user),
-            }
-        )
+        response = Response({
+            "access": _issue_access_token(session.user),
+            "session_expires_at": new_session.expires_at.isoformat(),
+            "user": _user_payload(session.user),
+        })
         _set_session_cookie(response, new_raw_token)
         return response
 
@@ -276,10 +251,10 @@ class LogoutView(APIView):
         raw_token = request.COOKIES.get(_cookie_name(), "")
         if raw_token:
             now = timezone.now()
-            AuthSession.objects.select_for_update().filter(
-                token_hash=_token_hash(raw_token),
-                revoked_at__isnull=True,
-            ).update(revoked_at=now, last_used_at=now)
+            AuthSession.objects.select_for_update().filter(token_hash=_token_hash(raw_token), revoked_at__isnull=True).update(
+                revoked_at=now,
+                last_used_at=now,
+            )
 
         response = Response(status=status.HTTP_204_NO_CONTENT)
         _clear_session_cookie(response)
