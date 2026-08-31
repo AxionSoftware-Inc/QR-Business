@@ -1,203 +1,129 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  addCustomDomainInBackend,
-  buildBackendQrSvgUrl,
-  buildBackendQrUrl,
-  getSiteAnalyticsFromBackend,
-  listMySitesFromBackend,
-  verifyCustomDomainInBackend,
-} from "@/modules/api/backend-client";
-import {
-  getGuestOwnerContact,
-  getGuestOwnerRecoveryCode,
-  getGuestOwnerToken,
-  saveGuestOwnerContact,
-  saveGuestOwnerRecoveryCode,
-  saveGuestOwnerToken,
-} from "@/modules/guest/guest-session";
-import type { PublishedSite } from "@/modules/sites/types";
-
-const createdSitesStorageKey = "bm-guest-created-sites";
+  createV2Domain,
+  createV2QRCode,
+  downloadV2QRCode,
+  getV2DomainVerification,
+  getV2SiteAnalytics,
+  listV2Domains,
+  listV2QRCodes,
+  listV2Sites,
+  verifyV2Domain,
+  type V2Analytics,
+  type V2Domain,
+  type V2QRCode,
+  type V2Site,
+} from "@/modules/api/v2-management-client";
+import { getCachedV2User, refreshV2Session } from "@/modules/auth/v2-session";
 
 export function GuestDashboardClient() {
-  const [sites, setSites] = useState<PublishedSite[]>([]);
-  const [origin, setOrigin] = useState("http://127.0.0.1:3000");
-  const [ownerContact, setOwnerContact] = useState("");
-  const [recoveryCode, setRecoveryCode] = useState("");
-  const [restoreStatus, setRestoreStatus] = useState<
-    "idle" | "loading" | "found" | "empty"
-  >("idle");
+  const [sites, setSites] = useState<V2Site[]>([]);
+  const [domains, setDomains] = useState<V2Domain[]>([]);
+  const [qrCodes, setQrCodes] = useState<V2QRCode[]>([]);
+  const [analytics, setAnalytics] = useState<Record<string, V2Analytics>>({});
+  const [status, setStatus] = useState<"loading" | "ready" | "signed-out" | "error">("loading");
+  const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    window.setTimeout(() => {
-      setOrigin(window.location.origin);
-      const ownerToken = getGuestOwnerToken();
-      const savedOwnerContact = getGuestOwnerContact();
-      const savedRecoveryCode = getGuestOwnerRecoveryCode();
-      setOwnerContact(savedOwnerContact);
-      setRecoveryCode(savedRecoveryCode);
-
-      try {
-        const raw = window.localStorage.getItem(createdSitesStorageKey);
-        setSites(raw ? (JSON.parse(raw) as PublishedSite[]) : []);
-      } catch {
-        window.localStorage.removeItem(createdSitesStorageKey);
-      }
-
-      listMySitesFromBackend(ownerToken, savedOwnerContact, savedRecoveryCode).then((backendSites) => {
-        if (backendSites.length > 0) {
-          setSites(backendSites);
-          setRestoreStatus("found");
-        }
-      });
-    }, 0);
-  }, []);
-
-  async function restoreByContact() {
-    const normalizedContact = ownerContact.trim().toLowerCase();
-    const normalizedCode = recoveryCode.trim().toUpperCase();
-
-    if (!normalizedContact || !normalizedCode) {
-      setRestoreStatus("empty");
+  async function reload() {
+    const session = getCachedV2User() ? { user: getCachedV2User() } : await refreshV2Session();
+    if (!session?.user) {
+      setStatus("signed-out");
       return;
     }
-
-    setRestoreStatus("loading");
-    saveGuestOwnerContact(normalizedContact);
-    saveGuestOwnerRecoveryCode(normalizedCode);
-    const backendSites = await listMySitesFromBackend(
-      "",
-      normalizedContact,
-      normalizedCode,
-    );
-
-    if (backendSites.length === 0) {
-      setRestoreStatus("empty");
-      return;
+    try {
+      const [nextSites, nextDomains, nextQrCodes] = await Promise.all([
+        listV2Sites(),
+        listV2Domains(),
+        listV2QRCodes(),
+      ]);
+      setSites(nextSites);
+      setDomains(nextDomains);
+      setQrCodes(nextQrCodes);
+      setStatus("ready");
+      const rows = await Promise.all(
+        nextSites.map(async (site) => [site.id, await getV2SiteAnalytics(site.id)] as const),
+      );
+      setAnalytics(Object.fromEntries(rows));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Dashboard yuklanmadi.");
+      setStatus("error");
     }
-
-    const ownerToken = backendSites.find((site) => site.ownerToken)?.ownerToken;
-    const nextRecoveryCode = backendSites.find((site) => site.ownerRecoveryCode)
-      ?.ownerRecoveryCode;
-    if (ownerToken) {
-      saveGuestOwnerToken(ownerToken);
-    }
-    if (nextRecoveryCode) {
-      saveGuestOwnerRecoveryCode(nextRecoveryCode);
-      setRecoveryCode(nextRecoveryCode);
-    }
-
-    setSites(backendSites);
-    setRestoreStatus("found");
   }
 
+  useEffect(() => {
+    void reload();
+  }, []);
+
   const publishedCount = sites.filter((site) => site.status === "published").length;
-  const proCount = sites.filter((site) => site.templateKey === "pro").length;
+  const totalViews = useMemo(
+    () => sites.reduce((sum, site) => sum + metric(analytics[site.id], "view"), 0),
+    [analytics, sites],
+  );
+  const totalScans = useMemo(
+    () => sites.reduce((sum, site) => sum + metric(analytics[site.id], "qr_scan"), 0),
+    [analytics, sites],
+  );
+
+  if (status === "loading") {
+    return <PanelText>Dashboard yuklanmoqda...</PanelText>;
+  }
+
+  if (status === "signed-out") {
+    return (
+      <section className="mt-6 rounded-xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+        <h2 className="text-2xl font-semibold">Account bilan kiring</h2>
+        <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
+          V2 dashboard recovery code yoki browser tokeniga ishonmaydi. Saytlar, QR va domainlar verified account membership orqali boshqariladi.
+        </p>
+        <Link className="mt-5 inline-flex min-h-11 items-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white" href="/login?next=/guest/dashboard">
+          Google bilan kirish
+        </Link>
+      </section>
+    );
+  }
 
   return (
-    <section className="mt-6 rounded-lg bg-white p-5 shadow-sm ring-1 ring-black/5">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <section className="mt-6 rounded-xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold">Yaratilgan guest saytlar</h2>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
-            Backenddagi guest token bo&apos;yicha yaratilgan saytlar va QR kodlar.
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">V2 workspace</p>
+          <h2 className="mt-1 text-2xl font-semibold">Saytlar va QR boshqaruvi</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-500">Private API tenant membership bilan scope qilingan.</p>
         </div>
-        <Link
-          className="flex min-h-11 items-center rounded-md bg-teal-700 px-4 text-sm font-semibold text-white"
-          href="/guest/builder?plan=plus"
-        >
-          Yangi sayt
-        </Link>
-      </div>
-
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <DashboardStat label="Jami" value={String(sites.length)} />
-        <DashboardStat label="Online" value={String(publishedCount)} />
-        <DashboardStat label="Pro" value={String(proCount)} />
-      </div>
-
-      <div className="mt-5 grid gap-3 rounded-lg bg-slate-50 p-4 ring-1 ring-black/5 lg:grid-cols-[1fr_220px_auto] lg:items-end">
-        <label className="grid gap-1.5">
-          <span className="text-sm font-medium text-slate-600">
-            Telefon/email
-          </span>
-          <input
-            className="min-h-11 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-500"
-            onChange={(event) => setOwnerContact(event.target.value)}
-            placeholder="+998901234567 yoki name@example.com"
-            value={ownerContact}
-          />
-          <span className="text-xs text-slate-500">
-            Builderda kiritilgan egasi telefoni yoki emaili.
-          </span>
-        </label>
-        <label className="grid gap-1.5">
-          <span className="text-sm font-medium text-slate-600">
-            Recovery code
-          </span>
-          <input
-            className="min-h-11 rounded-md border border-slate-200 bg-white px-3 text-sm uppercase outline-none focus:border-slate-500"
-            onChange={(event) => setRecoveryCode(event.target.value.toUpperCase())}
-            placeholder="A1B2C3"
-            value={recoveryCode}
-          />
-          <span className="text-xs text-slate-500">
-            Publishdan keyin berilgan kod.
-          </span>
-        </label>
-        <button
-          className="min-h-11 rounded-md bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-400"
-          disabled={restoreStatus === "loading"}
-          onClick={restoreByContact}
-          type="button"
-        >
-          {restoreStatus === "loading" ? "Qidirilyapti..." : "Tiklash"}
+        <button className="min-h-10 rounded-md bg-white px-3 text-sm font-semibold text-slate-800 ring-1 ring-black/10" onClick={() => void reload()} type="button">
+          Yangilash
         </button>
       </div>
-      {restoreStatus === "empty" ? (
-        <p className="mt-3 rounded-md bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700 ring-1 ring-amber-100">
-          Kontakt yoki recovery code noto&apos;g&apos;ri.
-        </p>
-      ) : restoreStatus === "found" ? (
-        <p className="mt-3 rounded-md bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-700 ring-1 ring-teal-100">
-          Saytlar dashboardga tiklandi.
-        </p>
-      ) : null}
+
+      {message ? <p className="mt-4 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800">{message}</p> : null}
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-4">
+        <DashboardStat label="Saytlar" value={String(sites.length)} />
+        <DashboardStat label="Published" value={String(publishedCount)} />
+        <DashboardStat label="Views" value={String(totalViews)} />
+        <DashboardStat label="QR scans" value={String(totalScans)} />
+      </div>
 
       {sites.length === 0 ? (
         <div className="mt-5 rounded-lg bg-slate-50 p-5 ring-1 ring-black/5">
-          <p className="text-base font-semibold">Hali sayt yo&apos;q</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Plus yoki Pro paketni tanlab birinchi QR vizitkani yarating.
-          </p>
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-            <Link
-              className="flex min-h-11 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-semibold text-white"
-              href="/guest/builder?plan=plus"
-            >
-              Plus bilan boshlash
-            </Link>
-            <Link
-              className="flex min-h-11 items-center justify-center rounded-md bg-white px-4 text-sm font-semibold text-slate-800 ring-1 ring-black/10"
-              href="/guest/builder?plan=pro"
-            >
-              Pro ko&apos;rish
-            </Link>
-          </div>
+          <p className="font-semibold">Hali V2 sayt yo‘q</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Legacy saytlar migratsiya qilingach shu yerda ko‘rinadi. Yangi builder ham V2 draft/publish oqimiga ulanmoqda.</p>
+          <Link className="mt-4 inline-flex min-h-11 items-center rounded-md bg-teal-700 px-4 text-sm font-semibold text-white" href="/guest/builder?plan=plus">
+            Yangi sayt yaratish
+          </Link>
         </div>
       ) : (
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           {sites.map((site) => (
-            <CreatedSiteCard
+            <SiteCard
+              analytics={analytics[site.id]}
+              domains={domains.filter((domain) => domain.site === site.id)}
               key={site.id}
-              origin={origin}
-              ownerContact={ownerContact}
-              ownerToken={getGuestOwnerToken()}
-              recoveryCode={recoveryCode}
+              qrCodes={qrCodes.filter((qr) => qr.site === site.id)}
+              onChanged={reload}
               site={site}
             />
           ))}
@@ -207,199 +133,131 @@ export function GuestDashboardClient() {
   );
 }
 
-function CreatedSiteCard({
-  origin,
-  ownerContact,
-  ownerToken,
-  recoveryCode,
-  site,
-}: {
-  origin: string;
-  ownerContact: string;
-  ownerToken: string;
-  recoveryCode: string;
-  site: PublishedSite;
+function SiteCard({ site, domains, qrCodes, analytics, onChanged }: {
+  site: V2Site;
+  domains: V2Domain[];
+  qrCodes: V2QRCode[];
+  analytics?: V2Analytics;
+  onChanged: () => Promise<void>;
 }) {
-  const publicPath = `/${site.tenantSlug ?? ""}`;
-  const publicUrl = `${origin}${publicPath}`;
-  const stickerPdfUrl = `/api/qr-sheet?url=${encodeURIComponent(publicUrl)}&title=${encodeURIComponent(site.title)}`;
-  const [analytics, setAnalytics] = useState<{
-    clicks: number;
-    clickTargets: Array<{ count: number; target: string }>;
-    views: number;
-  } | null>(null);
   const [hostname, setHostname] = useState("");
-  const [domainStatus, setDomainStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const user = getCachedV2User();
+  const tenant = user?.memberships.find((membership) => membership.tenant_id === site.tenant);
+  const publicPath = tenant ? `/${tenant.tenant_slug}/${site.slug}` : `/${site.slug}`;
+  const primaryQr = qrCodes[0];
 
-  useEffect(() => {
-    getSiteAnalyticsFromBackend({
-      ownerContact,
-      ownerToken,
-      recoveryCode,
-      siteId: site.id,
-    }).then((result) => {
-      if (result) {
-        setAnalytics(result);
-      }
-    });
-  }, [ownerContact, ownerToken, recoveryCode, site.id]);
-
-  async function addDomain() {
-    const result = await addCustomDomainInBackend({
-      hostname,
-      ownerContact,
-      ownerToken,
-      recoveryCode,
-      siteId: site.id,
-    });
-    setDomainStatus(
-      result
-        ? `${result.hostname}: ${result.instructions}`
-        : "Domain qo'shilmadi",
-    );
+  async function ensureQr() {
+    if (primaryQr) return primaryQr;
+    return createV2QRCode({ tenant: site.tenant, site: site.id, label: site.name, campaign: "default" });
   }
 
-  async function verifyDomain() {
-    const result = await verifyCustomDomainInBackend({
-      hostname,
-      ownerContact,
-      ownerToken,
-      recoveryCode,
-      siteId: site.id,
-    });
-    setDomainStatus(
-      result
-        ? `${result.hostname}: ${result.status}`
-        : "Domain tekshirilmadi",
-    );
+  async function download(format: "png" | "svg") {
+    setBusy(true);
+    setNote("");
+    try {
+      const qr = await ensureQr();
+      await downloadV2QRCode(qr, site.slug, format);
+      if (!primaryQr) await onChanged();
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : "QR yuklab bo‘lmadi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addDomain() {
+    const clean = hostname.trim().toLowerCase();
+    if (!clean) return;
+    setBusy(true);
+    try {
+      const domain = await createV2Domain({ tenant: site.tenant, site: site.id, hostname: clean });
+      const proof = await getV2DomainVerification(domain.id);
+      setNote(`DNS TXT: ${proof.record_name} = ${proof.record_value}`);
+      setHostname("");
+      await onChanged();
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : "Domain qo‘shilmadi.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verify(domain: V2Domain) {
+    setBusy(true);
+    try {
+      const result = await verifyV2Domain(domain.id);
+      setNote(result.verified ? `${domain.hostname} verified.` : `${domain.hostname}: TXT proof hali topilmadi.`);
+      await onChanged();
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : "Domain tekshirilmadi.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <article className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[150px_1fr]">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        alt={`${site.title} QR`}
-        className="aspect-square rounded-lg bg-white p-3 shadow-sm ring-1 ring-black/10"
-        src={buildBackendQrUrl(site.id, origin)}
-      />
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase text-slate-600">
-            {site.templateKey}
-          </span>
-          <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
-            {site.status}
-          </span>
-          {site.ownerRecoveryCode ? (
-            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-              Recovery: {site.ownerRecoveryCode}
-            </span>
-          ) : null}
-        </div>
-        <h3 className="mt-3 text-xl font-semibold">{site.title}</h3>
-        <p className="mt-2 break-all text-sm text-slate-500">{publicUrl}</p>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
-          <MiniStat label="Views" value={String(analytics?.views ?? 0)} />
-          <MiniStat label="Clicks" value={String(analytics?.clicks ?? 0)} />
-          <MiniStat
-            label="Top"
-            value={analytics?.clickTargets[0]?.target || "-"}
-          />
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {site.tenantSlug ? (
-            <Link
-              className="flex min-h-10 items-center rounded-md bg-teal-700 px-3 text-sm font-semibold text-white"
-              href={`/guest/builder?edit=${site.tenantSlug}`}
-            >
-              Tahrirlash
-            </Link>
-          ) : null}
-          <Link
-            className="flex min-h-10 items-center rounded-md bg-slate-950 px-3 text-sm font-semibold text-white"
-            href={publicPath}
-            target="_blank"
-          >
-            Sahifani ochish
+    <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{site.status}</span>
+        <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">{tenant?.role ?? "member"}</span>
+        {site.published ? <span className="text-xs text-slate-400">v{site.published.version}</span> : null}
+      </div>
+      <h3 className="mt-3 text-xl font-semibold">{site.name}</h3>
+      <p className="mt-1 text-sm text-slate-500">{publicPath}</p>
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        <MiniStat label="Views" value={String(metric(analytics, "view"))} />
+        <MiniStat label="Scans" value={String(metric(analytics, "qr_scan"))} />
+        <MiniStat label="Clicks" value={String(metric(analytics, "cta_click"))} />
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link className="flex min-h-10 items-center rounded-md bg-teal-700 px-3 text-sm font-semibold text-white" href={`/guest/builder?site=${site.id}`}>
+          Tahrirlash
+        </Link>
+        {site.status === "published" ? (
+          <Link className="flex min-h-10 items-center rounded-md bg-slate-950 px-3 text-sm font-semibold text-white" href={publicPath} target="_blank">
+            Public sayt
           </Link>
-          <a
-            className="flex min-h-10 items-center rounded-md bg-white px-3 text-sm font-semibold text-slate-800 ring-1 ring-black/10"
-            download={`${site.tenantSlug ?? site.id}.png`}
-            href={buildBackendQrUrl(site.id, origin)}
-          >
-            QR PNG
-          </a>
-          <a
-            className="flex min-h-10 items-center rounded-md bg-white px-3 text-sm font-semibold text-slate-800 ring-1 ring-black/10"
-            download={`${site.tenantSlug ?? site.id}.svg`}
-            href={buildBackendQrSvgUrl(site.id, origin)}
-          >
-            QR SVG
-          </a>
-          <a
-            className="flex min-h-10 items-center rounded-md bg-white px-3 text-sm font-semibold text-slate-800 ring-1 ring-black/10"
-            download={`${site.tenantSlug ?? site.id}-stickers.pdf`}
-            href={stickerPdfUrl}
-          >
-            Sticker PDF
-          </a>
+        ) : null}
+        <button className="min-h-10 rounded-md bg-white px-3 text-sm font-semibold ring-1 ring-black/10 disabled:opacity-50" disabled={busy} onClick={() => void download("png")} type="button">QR PNG</button>
+        <button className="min-h-10 rounded-md bg-white px-3 text-sm font-semibold ring-1 ring-black/10 disabled:opacity-50" disabled={busy} onClick={() => void download("svg")} type="button">QR SVG</button>
+      </div>
+
+      <div className="mt-4 rounded-md bg-slate-50 p-3 ring-1 ring-black/5">
+        <p className="text-sm font-semibold">Custom domain</p>
+        <div className="mt-2 flex gap-2">
+          <input className="min-h-10 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm" onChange={(event) => setHostname(event.target.value)} placeholder="example.com" value={hostname} />
+          <button className="min-h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white disabled:opacity-50" disabled={busy} onClick={() => void addDomain()} type="button">Qo‘shish</button>
         </div>
-        <div className="mt-4 rounded-md bg-slate-50 p-3 ring-1 ring-black/5">
-          <p className="text-sm font-semibold">Custom domain</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-            <input
-              className="min-h-10 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-500"
-              onChange={(event) => setHostname(event.target.value)}
-              placeholder="example.uz"
-              value={hostname}
-            />
-            <button
-              className="min-h-10 rounded-md bg-white px-3 text-sm font-semibold text-slate-800 ring-1 ring-black/10"
-              onClick={addDomain}
-              type="button"
-            >
-              Qo&apos;shish
-            </button>
-            <button
-              className="min-h-10 rounded-md bg-slate-950 px-3 text-sm font-semibold text-white"
-              onClick={verifyDomain}
-              type="button"
-            >
-              Verify
-            </button>
+        {domains.map((domain) => (
+          <div className="mt-3 flex items-center justify-between gap-3 text-sm" key={domain.id}>
+            <span className="min-w-0 truncate">{domain.hostname} · {domain.status}</span>
+            {domain.status !== "verified" ? (
+              <button className="shrink-0 font-semibold text-teal-700 disabled:opacity-50" disabled={busy} onClick={() => void verify(domain)} type="button">Verify</button>
+            ) : null}
           </div>
-          {domainStatus ? (
-            <p className="mt-2 break-all text-xs leading-5 text-slate-500">
-              {domainStatus}
-            </p>
-          ) : null}
-          {site.domains?.filter((domain) => domain.type === "custom").map((domain) => (
-            <p className="mt-2 text-xs text-slate-500" key={domain.hostname}>
-              {domain.hostname} - {domain.status}
-            </p>
-          ))}
-        </div>
+        ))}
+        {note ? <p className="mt-3 break-all text-xs leading-5 text-slate-600">{note}</p> : null}
       </div>
     </article>
   );
 }
 
+function metric(analytics: V2Analytics | undefined, type: "view" | "qr_scan" | "cta_click") {
+  return analytics?.totals.find((row) => row.event_type === type)?.count ?? 0;
+}
+
 function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-black/5">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 truncate text-sm font-semibold">{value}</p>
-    </div>
-  );
+  return <div className="rounded-md bg-slate-50 px-3 py-2 ring-1 ring-black/5"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 truncate text-sm font-semibold">{value}</p></div>;
 }
 
 function DashboardStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-black/5">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
-    </div>
-  );
+  return <div className="rounded-lg bg-slate-50 p-4 ring-1 ring-black/5"><p className="text-sm text-slate-500">{label}</p><p className="mt-2 text-3xl font-semibold">{value}</p></div>;
+}
+
+function PanelText({ children }: { children: React.ReactNode }) {
+  return <section className="mt-6 rounded-xl bg-white p-6 text-sm text-slate-600 shadow-sm ring-1 ring-black/5">{children}</section>;
 }
