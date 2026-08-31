@@ -1,5 +1,6 @@
 from io import BytesIO
 
+import dns.exception
 import dns.resolver
 import qrcode
 from django.conf import settings
@@ -13,6 +14,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .entitlements import entitlement_payload, enforce_custom_domain, enforce_site_create, for_tenant
 from .models import AnalyticsEvent, AuditLog, Domain, Membership, QRCode, Site, Tenant
 from .permissions import ADMIN_ROLES, WRITE_ROLES, CanAdministerTenant, CanEditTenantObject
 from .serializers import (
@@ -73,14 +75,12 @@ class TenantViewSet(viewsets.ModelViewSet):
         tenant = self.get_object()
         if not can_admin(self.request.user, tenant.id):
             from rest_framework.exceptions import PermissionDenied
-
             raise PermissionDenied("Owner or admin role required.")
         serializer.save(plan=tenant.plan, status=tenant.status)
 
     def perform_destroy(self, instance):
         if not can_admin(self.request.user, instance.id):
             from rest_framework.exceptions import PermissionDenied
-
             raise PermissionDenied("Owner or admin role required.")
         instance.status = Tenant.Status.ARCHIVED
         instance.save(update_fields=["status", "updated_at"])
@@ -93,38 +93,37 @@ class TenantViewSet(viewsets.ModelViewSet):
         rows = tenant.memberships.select_related("user").order_by("created_at")
         return Response(MembershipSerializer(rows, many=True).data)
 
+    @action(detail=True, methods=["get"], url_path="entitlements")
+    def entitlements(self, request, pk=None):
+        tenant = self.get_object()
+        return Response(entitlement_payload(tenant))
+
 
 class SiteViewSet(viewsets.ModelViewSet):
     serializer_class = SiteSerializer
     permission_classes = [IsAuthenticated, CanEditTenantObject]
 
     def get_queryset(self):
-        return (
-            Site.objects.filter(tenant_id__in=user_tenant_ids(self.request.user))
-            .select_related("tenant", "draft_version", "published_version")
-            .distinct()
-        )
+        return Site.objects.filter(tenant_id__in=user_tenant_ids(self.request.user)).select_related("tenant", "draft_version", "published_version").distinct()
 
     def perform_create(self, serializer):
         tenant = serializer.validated_data["tenant"]
         if not can_write(self.request.user, tenant.id):
             from rest_framework.exceptions import PermissionDenied
-
             raise PermissionDenied("Editor, admin, or owner role required.")
+        enforce_site_create(tenant)
         serializer.save(status=Site.Status.DRAFT)
 
     def perform_update(self, serializer):
         site = self.get_object()
         if not can_write(self.request.user, site.tenant_id):
             from rest_framework.exceptions import PermissionDenied
-
             raise PermissionDenied("Editor, admin, or owner role required.")
         serializer.save(tenant=site.tenant, status=site.status)
 
     def perform_destroy(self, instance):
         if not can_admin(self.request.user, instance.tenant_id):
             from rest_framework.exceptions import PermissionDenied
-
             raise PermissionDenied("Owner or admin role required.")
         instance.status = Site.Status.DISABLED
         instance.save(update_fields=["status", "updated_at"])
@@ -158,14 +157,16 @@ class SiteViewSet(viewsets.ModelViewSet):
         site = self.get_object()
         events = site.analytics_events.all()
         totals = events.values("event_type").annotate(count=Count("id"))
-        targets = (
-            events.filter(event_type=AnalyticsEvent.EventType.CTA_CLICK)
-            .exclude(target="")
-            .values("target")
-            .annotate(count=Count("id"))
-            .order_by("-count")[:20]
-        )
-        return Response({"totals": list(totals), "top_targets": list(targets)})
+        targets = events.filter(event_type=AnalyticsEvent.EventType.CTA_CLICK).exclude(target="").values("target").annotate(count=Count("id")).order_by("-count")[:20]
+        response = {"totals": list(totals), "top_targets": list(targets)}
+        if for_tenant(site.tenant).advanced_analytics:
+            response["daily"] = list(
+                events.extra(select={"day": "DATE(occurred_at)"})
+                .values("day", "event_type")
+                .annotate(count=Count("id"))
+                .order_by("day")[-90:]
+            )
+        return Response(response)
 
 
 class DomainViewSet(viewsets.ModelViewSet):
@@ -179,12 +180,11 @@ class DomainViewSet(viewsets.ModelViewSet):
         tenant = serializer.validated_data["tenant"]
         if not can_admin(self.request.user, tenant.id):
             from rest_framework.exceptions import PermissionDenied
-
             raise PermissionDenied("Owner or admin role required.")
+        enforce_custom_domain(tenant)
         site = serializer.validated_data.get("site")
         if site and site.tenant_id != tenant.id:
             from rest_framework.exceptions import ValidationError
-
             raise ValidationError({"site": "Site must belong to the selected tenant."})
         serializer.save(kind=Domain.Kind.CUSTOM, status=Domain.Status.PENDING)
 
@@ -196,33 +196,18 @@ class DomainViewSet(viewsets.ModelViewSet):
         record_name = f"_qr-business.{domain.hostname}"
         expected = f"qr-business-verification={domain.verification_token}"
         if request.method == "GET":
-            return Response({
-                "hostname": domain.hostname,
-                "record_type": "TXT",
-                "record_name": record_name,
-                "record_value": expected,
-                "status": domain.status,
-            })
-
+            return Response({"hostname": domain.hostname, "record_type": "TXT", "record_name": record_name, "record_value": expected, "status": domain.status})
         observed = []
         try:
             answers = dns.resolver.resolve(record_name, "TXT", lifetime=4.0)
             observed = [b"".join(answer.strings).decode("utf-8", errors="replace") for answer in answers]
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.Timeout):
             observed = []
-
         verified = expected in observed
         domain.status = Domain.Status.VERIFIED if verified else Domain.Status.PENDING
         domain.verified_at = timezone.now() if verified else None
         domain.save(update_fields=["status", "verified_at", "updated_at"])
-        AuditLog.objects.create(
-            tenant=domain.tenant,
-            actor=request.user,
-            action="domain.verify",
-            object_type="domain",
-            object_id=str(domain.id),
-            metadata={"hostname": domain.hostname, "verified": verified},
-        )
+        AuditLog.objects.create(tenant=domain.tenant, actor=request.user, action="domain.verify", object_type="domain", object_id=str(domain.id), metadata={"hostname": domain.hostname, "verified": verified})
         return Response({"hostname": domain.hostname, "verified": verified, "status": domain.status, "observed": observed})
 
 
@@ -238,11 +223,9 @@ class QRCodeViewSet(viewsets.ModelViewSet):
         site = serializer.validated_data["site"]
         if not can_write(self.request.user, tenant.id):
             from rest_framework.exceptions import PermissionDenied
-
             raise PermissionDenied("Editor, admin, or owner role required.")
         if site.tenant_id != tenant.id:
             from rest_framework.exceptions import ValidationError
-
             raise ValidationError({"site": "Site must belong to the selected tenant."})
         serializer.save()
 
@@ -254,7 +237,6 @@ class QRCodeViewSet(viewsets.ModelViewSet):
         image_format = str(request.query_params.get("format") or "png").lower()
         if image_format == "svg":
             from qrcode.image.svg import SvgPathImage
-
             image = qrcode.make(target, image_factory=SvgPathImage)
             buffer = BytesIO()
             image.save(buffer)
@@ -277,17 +259,7 @@ class PublicSiteBySlugView(APIView):
     throttle_scope = "public_read"
 
     def get(self, request, tenant_slug, site_slug):
-        site = (
-            Site.objects.select_related("tenant", "published_version")
-            .filter(
-                tenant__slug=tenant_slug,
-                tenant__status__in=[Tenant.Status.TRIAL, Tenant.Status.ACTIVE],
-                slug=site_slug,
-                status=Site.Status.PUBLISHED,
-                published_version__isnull=False,
-            )
-            .first()
-        )
+        site = Site.objects.select_related("tenant", "published_version").filter(tenant__slug=tenant_slug, tenant__status__in=[Tenant.Status.TRIAL, Tenant.Status.ACTIVE], slug=site_slug, status=Site.Status.PUBLISHED, published_version__isnull=False).first()
         if not site:
             return Response({"detail": "Site not found."}, status=404)
         response = Response(PublicSiteSerializer(site).data)
@@ -300,26 +272,12 @@ class PublicEventView(APIView):
     throttle_scope = "analytics_write"
 
     def post(self, request, site_id):
-        site = (
-            Site.objects.select_related("tenant")
-            .filter(
-                id=site_id,
-                tenant__status__in=[Tenant.Status.TRIAL, Tenant.Status.ACTIVE],
-                status=Site.Status.PUBLISHED,
-            )
-            .first()
-        )
+        site = Site.objects.select_related("tenant").filter(id=site_id, tenant__status__in=[Tenant.Status.TRIAL, Tenant.Status.ACTIVE], status=Site.Status.PUBLISHED).first()
         if not site:
             return Response({"detail": "Site not found."}, status=404)
         incoming = EventSerializer(data=request.data)
         incoming.is_valid(raise_exception=True)
-        record_event(
-            request=request,
-            site=site,
-            event_type=incoming.validated_data["event_type"],
-            target=incoming.validated_data.get("target", ""),
-            metadata=incoming.validated_data.get("metadata", {}),
-        )
+        record_event(request=request, site=site, event_type=incoming.validated_data["event_type"], target=incoming.validated_data.get("target", ""), metadata=incoming.validated_data.get("metadata", {}))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -328,25 +286,10 @@ class QRRedirectView(APIView):
     throttle_scope = "qr_redirect"
 
     def get(self, request, code):
-        qr = (
-            QRCode.objects.select_related("site", "site__tenant")
-            .filter(
-                code=code,
-                is_active=True,
-                site__status=Site.Status.PUBLISHED,
-                site__tenant__status__in=[Tenant.Status.TRIAL, Tenant.Status.ACTIVE],
-            )
-            .first()
-        )
+        qr = QRCode.objects.select_related("site", "site__tenant").filter(code=code, is_active=True, site__status=Site.Status.PUBLISHED, site__tenant__status__in=[Tenant.Status.TRIAL, Tenant.Status.ACTIVE]).first()
         if not qr:
             return Response({"detail": "QR code not found."}, status=404)
-        record_event(
-            request=request,
-            site=qr.site,
-            qr_code=qr,
-            event_type=AnalyticsEvent.EventType.QR_SCAN,
-            metadata={"campaign": qr.campaign},
-        )
+        record_event(request=request, site=qr.site, qr_code=qr, event_type=AnalyticsEvent.EventType.QR_SCAN, metadata={"campaign": qr.campaign})
         base = getattr(settings, "PUBLIC_WEB_BASE_URL", "http://localhost:3000").rstrip("/")
         return HttpResponseRedirect(f"{base}/{qr.site.tenant.slug}/{qr.site.slug}")
 
