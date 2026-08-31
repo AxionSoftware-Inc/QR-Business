@@ -4,7 +4,6 @@ import uuid
 from django.conf import settings
 from django.core.validators import RegexValidator
 from django.db import models
-from django.db.models import Q
 
 
 slug_validator = RegexValidator(
@@ -67,6 +66,23 @@ class Membership(TimeStampedModel):
             models.UniqueConstraint(fields=["tenant", "user"], name="v2_unique_tenant_member"),
         ]
         indexes = [models.Index(fields=["user", "is_active"])]
+
+
+class Identity(TimeStampedModel):
+    class Provider(models.TextChoices):
+        GOOGLE = "google", "Google"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="qr_identities", on_delete=models.CASCADE)
+    provider = models.CharField(max_length=32, choices=Provider.choices)
+    subject = models.CharField(max_length=255)
+    email = models.EmailField(blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["provider", "subject"], name="v2_unique_external_identity"),
+        ]
+        indexes = [models.Index(fields=["user", "provider"])]
 
 
 class Site(TimeStampedModel):
