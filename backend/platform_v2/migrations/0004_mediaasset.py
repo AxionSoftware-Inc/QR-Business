@@ -33,10 +33,10 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="mediaasset",
-            index=models.Index(fields=["tenant", "created_at"], name="platform_v2_tenant__media_created_idx"),
+            index=models.Index(fields=["tenant", "created_at"], name="v2_media_tenant_created_idx"),
         ),
         migrations.AddIndex(
             model_name="mediaasset",
-            index=models.Index(fields=["tenant", "sha256"], name="platform_v2_tenant__media_sha_idx"),
+            index=models.Index(fields=["tenant", "sha256"], name="v2_media_tenant_sha_idx"),
         ),
     ]
