@@ -3,11 +3,13 @@
 import type React from "react";
 import { useEffect } from "react";
 import { trackSiteEventInBackend } from "@/modules/api/backend-client";
-import { trackPublicCtaInV2 } from "@/modules/api/v2-client";
+import { trackPublicCtaInV2, trackPublicViewInV2 } from "@/modules/api/v2-client";
 
 type SiteViewTrackerProps = {
   siteId: string;
 };
+
+const trackedViews = new Set<string>();
 
 function isV2SiteId(siteId: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(siteId);
@@ -19,12 +21,19 @@ function isLegacyDatabaseId(siteId: string) {
 
 export function SiteViewTracker({ siteId }: SiteViewTrackerProps) {
   useEffect(() => {
-    if (!isLegacyDatabaseId(siteId)) {
-      // V2 view events are recorded server-side on public read. Preview/mock ids
-      // must never emit analytics traffic.
+    if (trackedViews.has(siteId)) return;
+
+    if (isV2SiteId(siteId)) {
+      trackedViews.add(siteId);
+      void trackPublicViewInV2(siteId);
       return;
     }
-    void trackSiteEventInBackend({ eventType: "view", siteId });
+
+    if (isLegacyDatabaseId(siteId)) {
+      trackedViews.add(siteId);
+      void trackSiteEventInBackend({ eventType: "view", siteId });
+    }
+    // Preview/mock ids intentionally emit no analytics traffic.
   }, [siteId]);
 
   return null;
