@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from .auth_views import GoogleLoginView, LogoutView, MeView, SessionRefreshView
 from .compat_views import PublicDefaultSiteView
 from .views import (
     DomainViewSet,
@@ -22,6 +23,10 @@ router.register("qr-codes", QRCodeViewSet, basename="v2-qr-code")
 
 urlpatterns = [
     path("health/", HealthView.as_view(), name="v2-health"),
+    path("auth/google/", GoogleLoginView.as_view(), name="v2-auth-google"),
+    path("auth/refresh/", SessionRefreshView.as_view(), name="v2-auth-refresh"),
+    path("auth/logout/", LogoutView.as_view(), name="v2-auth-logout"),
+    path("auth/me/", MeView.as_view(), name="v2-auth-me"),
     path(
         "public/sites/<slug:tenant_slug>/",
         PublicDefaultSiteView.as_view(),
