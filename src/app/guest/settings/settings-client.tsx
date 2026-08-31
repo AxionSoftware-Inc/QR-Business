@@ -8,7 +8,10 @@ import {
   listV2Members,
   listV2TeamInvitations,
   listV2Tenants,
+  removeV2Member,
   revokeV2TeamInvitation,
+  transferV2Ownership,
+  updateV2MemberRole,
   updateV2Tenant,
   type V2Entitlements,
   type V2MembershipRow,
@@ -29,6 +32,7 @@ export function SettingsClient() {
   const [inviteToken, setInviteToken] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [busyMember, setBusyMember] = useState("");
 
   async function reload() {
     setLoading(true);
@@ -56,12 +60,25 @@ export function SettingsClient() {
     catch(error){setMessage(error instanceof Error?error.message:"Invite yaratilmadi.");}
   }
   async function revoke(id:string){try{await revokeV2TeamInvitation(id);await reload();}catch(error){setMessage(error instanceof Error?error.message:"Revoke bajarilmadi.");}}
+  async function changeRole(member:V2MembershipRow,next:"admin"|"editor"|"analyst"){
+    setBusyMember(member.id); try{await updateV2MemberRole(member.id,next);setMessage(`${member.email} roli ${next} ga o‘zgardi.`);await reload();}catch(error){setMessage(error instanceof Error?error.message:"Role o‘zgarmadi.");}finally{setBusyMember("");}
+  }
+  async function removeMember(member:V2MembershipRow){
+    if(!window.confirm(`${member.email} ni workspace’dan olib tashlaysizmi?`))return;
+    setBusyMember(member.id);try{await removeV2Member(member.id);setMessage("Member olib tashlandi.");await reload();}catch(error){setMessage(error instanceof Error?error.message:"Member olib tashlanmadi.");}finally{setBusyMember("");}
+  }
+  async function transferOwner(member:V2MembershipRow){
+    if(!tenant||!window.confirm(`Ownership ${member.email} ga o‘tkazilsinmi? Siz admin bo‘lib qolasiz.`))return;
+    setBusyMember(member.id);try{await transferV2Ownership(tenant.id,member.id);await refreshV2Session();setMessage("Ownership muvaffaqiyatli o‘tkazildi.");await reload();}catch(error){setMessage(error instanceof Error?error.message:"Ownership o‘tkazilmadi.");}finally{setBusyMember("");}
+  }
 
   if (loading) return <Panel>Settings yuklanmoqda...</Panel>;
   if (!tenant) return <Panel><p>Workspace topilmadi.</p><Link className="mt-4 inline-flex text-sm font-semibold text-teal-700" href="/guest/builder?plan=plus">Birinchi workspace yaratish</Link></Panel>;
 
-  const membership=getCachedV2User()?.memberships.find((m)=>m.tenant_id===tenant.id);
-  const canAdmin=Boolean(getCachedV2User()?.is_staff || membership?.role==="owner" || membership?.role==="admin");
+  const user=getCachedV2User();
+  const membership=user?.memberships.find((m)=>m.tenant_id===tenant.id);
+  const canAdmin=Boolean(user?.is_staff || membership?.role==="owner" || membership?.role==="admin");
+  const isOwner=Boolean(user?.is_staff || membership?.role==="owner");
 
   return <div className="space-y-5">
     {message?<p className="rounded-md bg-white px-4 py-3 text-sm ring-1 ring-black/5">{message}</p>:null}
@@ -70,9 +87,11 @@ export function SettingsClient() {
       <div className="mt-5 grid gap-3 md:grid-cols-3"><Field label="Nomi" value={tenant.name} onBlur={(v)=>void saveTenant({name:v})}/><Field label="Locale" value={tenant.locale} onBlur={(v)=>void saveTenant({locale:v})}/><Field label="Timezone" value={tenant.timezone} onBlur={(v)=>void saveTenant({timezone:v})}/></div>
     </section>
 
-    {entitlements?<section className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-black/5"><h2 className="text-xl font-semibold">Plan va limitlar</h2><div className="mt-4 grid gap-3 sm:grid-cols-3"><Usage label="Saytlar" used={entitlements.usage.sites} limit={entitlements.limits.sites}/><Usage label="Team" used={entitlements.usage.members} limit={entitlements.limits.members}/><Usage label="Media" used={entitlements.usage.media_assets} limit={entitlements.limits.media_assets}/></div><div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold"><Badge on={entitlements.features.custom_domains}>Custom domains</Badge><Badge on={entitlements.features.advanced_analytics}>Advanced analytics</Badge><Badge on={entitlements.features.remove_branding}>Remove branding</Badge></div></section>:null}
+    {entitlements?<section className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-black/5"><div className="flex items-center justify-between"><h2 className="text-xl font-semibold">Plan va limitlar</h2><Link className="text-sm font-semibold text-teal-700" href="/pricing">Planlarni ko‘rish</Link></div><div className="mt-4 grid gap-3 sm:grid-cols-3"><Usage label="Saytlar" used={entitlements.usage.sites} limit={entitlements.limits.sites}/><Usage label="Team" used={entitlements.usage.members} limit={entitlements.limits.members}/><Usage label="Media" used={entitlements.usage.media_assets} limit={entitlements.limits.media_assets}/></div><div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold"><Badge on={entitlements.features.custom_domains}>Custom domains</Badge><Badge on={entitlements.features.advanced_analytics}>Advanced analytics</Badge><Badge on={entitlements.features.remove_branding}>Remove branding</Badge></div></section>:null}
 
-    <section className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-black/5"><div className="flex items-center justify-between"><h2 className="text-xl font-semibold">Team</h2><span className="text-sm text-slate-500">{membership?.role??"member"}</span></div><div className="mt-4 divide-y divide-slate-100">{members.map((member)=><div className="flex items-center justify-between gap-3 py-3" key={member.id}><div><p className="text-sm font-semibold">{member.name||member.email}</p><p className="text-xs text-slate-500">{member.email}</p></div><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold">{member.role}</span></div>)}</div>
+    <section className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+      <div className="flex items-center justify-between"><h2 className="text-xl font-semibold">Team</h2><span className="text-sm text-slate-500">Siz: {membership?.role??"member"}</span></div>
+      <div className="mt-4 divide-y divide-slate-100">{members.map((member)=><div className="flex flex-wrap items-center justify-between gap-3 py-3" key={member.id}><div><p className="text-sm font-semibold">{member.name||member.email}</p><p className="text-xs text-slate-500">{member.email}</p></div><div className="flex items-center gap-2">{canAdmin&&member.role!=="owner"?<select className="min-h-9 rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold" disabled={busyMember===member.id} onChange={(e)=>void changeRole(member,e.target.value as "admin"|"editor"|"analyst")} value={member.role}><option value="admin">admin</option><option value="editor">editor</option><option value="analyst">analyst</option></select>:<span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold">{member.role}</span>}{isOwner&&member.role!=="owner"?<button className="text-xs font-semibold text-teal-700 disabled:opacity-40" disabled={busyMember===member.id} onClick={()=>void transferOwner(member)} type="button">Owner qilish</button>:null}{canAdmin&&member.role!=="owner"?<button className="text-xs font-semibold text-rose-600 disabled:opacity-40" disabled={busyMember===member.id} onClick={()=>void removeMember(member)} type="button">Remove</button>:null}</div></div>)}</div>
       {canAdmin?<><div className="mt-5 grid gap-2 sm:grid-cols-[1fr_150px_auto]"><input className="min-h-10 rounded-md border border-slate-200 px-3 text-sm" onChange={(e)=>setEmail(e.target.value)} placeholder="member@example.com" type="email" value={email}/><select className="min-h-10 rounded-md border border-slate-200 px-3 text-sm" onChange={(e)=>setRole(e.target.value as typeof role)} value={role}><option value="admin">Admin</option><option value="editor">Editor</option><option value="analyst">Analyst</option></select><button className="rounded-md bg-slate-950 px-4 text-sm font-semibold text-white" onClick={()=>void invite()} type="button">Invite</button></div>{inviteToken?<div className="mt-3 rounded-md bg-amber-50 p-3 text-xs leading-5 text-amber-900"><p className="font-semibold">Bir martalik invite link</p><code className="mt-1 block break-all">{`${window.location.origin}/guest/invite?token=${encodeURIComponent(inviteToken)}`}</code></div>:null}<div className="mt-4 space-y-2">{invitations.filter((x)=>x.status==="pending").map((inv)=><div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm" key={inv.id}><span>{inv.email} · {inv.role}</span><button className="text-xs font-semibold text-rose-600" onClick={()=>void revoke(inv.id)} type="button">Revoke</button></div>)}</div></>:null}
     </section>
   </div>;
