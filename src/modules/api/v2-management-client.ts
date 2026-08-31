@@ -14,7 +14,7 @@ export type V2Entitlements = { plan:V2Tenant["plan"]; limits:{sites:number;membe
 export type V2MembershipRow = { id:string; user:number; email:string; name:string; role:"owner"|"admin"|"editor"|"analyst"; is_active:boolean; created_at:string; updated_at:string };
 export type V2TeamInvitation = { id:string; tenant:string; email:string; role:"admin"|"editor"|"analyst"; status:"pending"|"accepted"|"revoked"|"expired"; expires_at:string; invited_by:number|null; accepted_by:number|null; accepted_at:string|null; created_at:string; token?:string };
 
-async function json<T>(path:string, init:RequestInit={}):Promise<T>{ const response=await authorizedV2Fetch(path,init); if(!response.ok){let detail=`Request failed (${response.status})`;try{const body=await response.json() as {detail?:string};if(body.detail)detail=body.detail;}catch{} throw new Error(detail);} return await response.json() as T; }
+async function json<T>(path:string, init:RequestInit={}):Promise<T>{ const response=await authorizedV2Fetch(path,init); if(!response.ok){let detail=`Request failed (${response.status})`;try{const body=await response.json() as {detail?:string};if(body.detail)detail=body.detail;}catch{} throw new Error(detail);} if(response.status===204)return undefined as T; return await response.json() as T; }
 
 export const listV2Tenants=()=>json<V2Tenant[]>("/api/v2/tenants/");
 export function createV2Tenant(input:{name:string;slug:string;locale?:string;timezone?:string}){return json<V2Tenant>("/api/v2/tenants/",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:input.name,slug:input.slug,locale:input.locale??"uz",timezone:input.timezone??"Asia/Tashkent"})});}
@@ -25,6 +25,9 @@ export const listV2TeamInvitations=(tenantId:string)=>json<V2TeamInvitation[]>(`
 export function createV2TeamInvitation(tenantId:string,input:{email:string;role:"admin"|"editor"|"analyst"}){return json<V2TeamInvitation>(`/api/v2/tenants/${tenantId}/team/invitations/`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(input)});}
 export const revokeV2TeamInvitation=(invitationId:string)=>json<V2TeamInvitation>(`/api/v2/team/invitations/${invitationId}/revoke/`,{method:"POST"});
 export const acceptV2TeamInvitation=(token:string)=>json<V2MembershipRow>("/api/v2/team/invitations/accept/",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token})});
+export function updateV2MemberRole(membershipId:string,role:"admin"|"editor"|"analyst"){return json<V2MembershipRow>(`/api/v2/team/members/${membershipId}/`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({role})});}
+export const removeV2Member=(membershipId:string)=>json<void>(`/api/v2/team/members/${membershipId}/`,{method:"DELETE"});
+export const transferV2Ownership=(tenantId:string,membershipId:string)=>json<{new_owner:V2MembershipRow;previous_owner:V2MembershipRow}>(`/api/v2/tenants/${tenantId}/team/transfer-ownership/`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({membership_id:membershipId})});
 
 export const listV2Sites=()=>json<V2Site[]>("/api/v2/sites/");
 export const getV2Site=(siteId:string)=>json<V2Site>(`/api/v2/sites/${siteId}/`);
