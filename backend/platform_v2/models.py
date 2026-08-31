@@ -85,6 +85,23 @@ class Identity(TimeStampedModel):
         indexes = [models.Index(fields=["user", "provider"])]
 
 
+class AuthSession(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="qr_auth_sessions", on_delete=models.CASCADE)
+    token_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["user", "revoked_at"]),
+            models.Index(fields=["expires_at"]),
+        ]
+        ordering = ["-created_at"]
+
+
 class Site(TimeStampedModel):
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
