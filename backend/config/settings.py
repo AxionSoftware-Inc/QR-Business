@@ -10,11 +10,7 @@ load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
-    if host.strip()
-]
+ALLOWED_HOSTS = [host.strip() for host in os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if host.strip()]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -43,20 +39,16 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
-TEMPLATES = [
-    {
-        "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
-        "APP_DIRS": True,
-        "OPTIONS": {
-            "context_processors": [
-                "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
-            ],
-        },
-    },
-]
+TEMPLATES = [{
+    "BACKEND": "django.template.backends.django.DjangoTemplates",
+    "DIRS": [],
+    "APP_DIRS": True,
+    "OPTIONS": {"context_processors": [
+        "django.template.context_processors.request",
+        "django.contrib.auth.context_processors.auth",
+        "django.contrib.messages.context_processors.messages",
+    ]},
+}]
 
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
@@ -89,6 +81,27 @@ USE_TZ = True
 STATIC_URL = "static/"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "").strip()
+if S3_BUCKET_NAME:
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3.S3Storage",
+            "OPTIONS": {
+                "bucket_name": S3_BUCKET_NAME,
+                "access_key": os.getenv("S3_ACCESS_KEY_ID") or None,
+                "secret_key": os.getenv("S3_SECRET_ACCESS_KEY") or None,
+                "endpoint_url": os.getenv("S3_ENDPOINT_URL") or None,
+                "region_name": os.getenv("S3_REGION_NAME") or None,
+                "custom_domain": os.getenv("S3_CUSTOM_DOMAIN") or None,
+                "querystring_auth": os.getenv("S3_QUERYSTRING_AUTH", "False").lower() == "true",
+                "default_acl": None,
+                "file_overwrite": False,
+                "object_parameters": {"CacheControl": "public, max-age=31536000, immutable"},
+            },
+        },
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -134,10 +147,7 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.getenv(
-        "CORS_ALLOWED_ORIGINS",
-        "http://127.0.0.1:3000,http://localhost:3000",
-    ).split(",")
+    for origin in os.getenv("CORS_ALLOWED_ORIGINS", "http://127.0.0.1:3000,http://localhost:3000").split(",")
     if origin.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
@@ -145,7 +155,6 @@ CORS_ALLOW_CREDENTIALS = True
 PUBLIC_WEB_BASE_URL = os.getenv("PUBLIC_WEB_BASE_URL", "http://localhost:3000")
 ANALYTICS_HASH_SALT = os.getenv("ANALYTICS_HASH_SALT", SECRET_KEY)
 
-# Production security defaults are enabled automatically when DEBUG=False.
 SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", str(not DEBUG)).lower() == "true"
 SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", str(not DEBUG)).lower() == "true"
 CSRF_COOKIE_SECURE = os.getenv("CSRF_COOKIE_SECURE", str(not DEBUG)).lower() == "true"
