@@ -74,12 +74,23 @@ export function V2Builder({ initialPlan, siteId }: { initialPlan: GuestPlan; sit
   const slug = normalizeSlug(draft.slug || draft.businessName);
   const isValid = draft.businessName.trim().length >= 2 && slug.length >= 3;
 
+  function persistLocal(next: GuestDraft) {
+    if (!siteId) window.localStorage.setItem(localDraftKey, JSON.stringify(next));
+  }
+
   function patch<K extends keyof GuestDraft>(key: K, value: GuestDraft[K]) {
     const next = { ...draft, [key]: value };
     if (key === "businessName" && !draft.slug) next.slug = normalizeSlug(String(value));
     if (key === "slug") next.slug = normalizeSlug(String(value));
     setDraft(next);
-    if (!siteId) window.localStorage.setItem(localDraftKey, JSON.stringify(next));
+    persistLocal(next);
+    setMessage("");
+  }
+
+  function selectPlan(plan: GuestPlan) {
+    const next = getDraftForPlan(plan, draft);
+    setDraft(next);
+    persistLocal(next);
     setMessage("");
   }
 
@@ -239,7 +250,7 @@ export function V2Builder({ initialPlan, siteId }: { initialPlan: GuestPlan; sit
               <p className="text-sm font-semibold">Template</p>
               <div className="mt-2 grid grid-cols-3 gap-2">
                 {(["oddiy", "plus", "pro"] as GuestPlan[]).map((plan) => (
-                  <button className={draft.plan === plan ? "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white" : "rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-black/5"} key={plan} onClick={() => patch("plan", getDraftForPlan(plan, draft).plan) || setDraft(getDraftForPlan(plan, draft))} type="button">{plan}</button>
+                  <button className={draft.plan === plan ? "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white" : "rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-black/5"} key={plan} onClick={() => selectPlan(plan)} type="button">{plan}</button>
                 ))}
               </div>
             </div>
