@@ -5,17 +5,14 @@ from .auth_views import GoogleLoginView, LogoutView, MeView, SessionRefreshView
 from .billing_views import BillingWebhookView
 from .compat_views import PublicDefaultSiteView
 from .media_views import MediaAssetViewSet
-from .team_views import TeamInvitationAcceptView, TeamInvitationListCreateView, TeamInvitationRevokeView
-from .views import (
-    DomainViewSet,
-    HealthView,
-    PublicEventView,
-    PublicSiteBySlugView,
-    QRCodeViewSet,
-    QRRedirectView,
-    SiteViewSet,
-    TenantViewSet,
+from .team_views import (
+    OwnershipTransferView,
+    TeamInvitationAcceptView,
+    TeamInvitationListCreateView,
+    TeamInvitationRevokeView,
+    TeamMemberDetailView,
 )
+from .views import DomainViewSet, HealthView, PublicEventView, PublicSiteBySlugView, QRCodeViewSet, QRRedirectView, SiteViewSet, TenantViewSet
 
 router = DefaultRouter()
 router.register("tenants", TenantViewSet, basename="v2-tenant")
@@ -34,6 +31,8 @@ urlpatterns = [
     path("team/invitations/accept/", TeamInvitationAcceptView.as_view(), name="v2-team-invite-accept"),
     path("tenants/<uuid:tenant_id>/team/invitations/", TeamInvitationListCreateView.as_view(), name="v2-team-invitations"),
     path("team/invitations/<uuid:invitation_id>/revoke/", TeamInvitationRevokeView.as_view(), name="v2-team-invite-revoke"),
+    path("team/members/<uuid:membership_id>/", TeamMemberDetailView.as_view(), name="v2-team-member"),
+    path("tenants/<uuid:tenant_id>/team/transfer-ownership/", OwnershipTransferView.as_view(), name="v2-team-transfer-ownership"),
     path("public/sites/<slug:tenant_slug>/", PublicDefaultSiteView.as_view(), name="v2-public-default-site"),
     path("public/sites/<slug:tenant_slug>/<slug:site_slug>/", PublicSiteBySlugView.as_view(), name="v2-public-site"),
     path("public/sites/<uuid:site_id>/events/", PublicEventView.as_view(), name="v2-public-event"),
