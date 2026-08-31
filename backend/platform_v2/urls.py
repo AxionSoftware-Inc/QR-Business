@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .auth_views import GoogleLoginView, LogoutView, MeView, SessionRefreshView
+from .billing_views import BillingWebhookView
 from .compat_views import PublicDefaultSiteView
 from .media_views import MediaAssetViewSet
 from .team_views import TeamInvitationAcceptView, TeamInvitationListCreateView, TeamInvitationRevokeView
@@ -16,7 +17,6 @@ from .views import (
     TenantViewSet,
 )
 
-
 router = DefaultRouter()
 router.register("tenants", TenantViewSet, basename="v2-tenant")
 router.register("sites", SiteViewSet, basename="v2-site")
@@ -30,6 +30,7 @@ urlpatterns = [
     path("auth/refresh/", SessionRefreshView.as_view(), name="v2-auth-refresh"),
     path("auth/logout/", LogoutView.as_view(), name="v2-auth-logout"),
     path("auth/me/", MeView.as_view(), name="v2-auth-me"),
+    path("billing/webhook/", BillingWebhookView.as_view(), name="v2-billing-webhook"),
     path("team/invitations/accept/", TeamInvitationAcceptView.as_view(), name="v2-team-invite-accept"),
     path("tenants/<uuid:tenant_id>/team/invitations/", TeamInvitationListCreateView.as_view(), name="v2-team-invitations"),
     path("team/invitations/<uuid:invitation_id>/revoke/", TeamInvitationRevokeView.as_view(), name="v2-team-invite-revoke"),
