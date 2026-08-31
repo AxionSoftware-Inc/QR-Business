@@ -1,7 +1,7 @@
 from django.core.files.storage import default_storage
 from rest_framework import serializers
 
-from .models import Domain, MediaAsset, Membership, QRCode, Site, SiteVersion, Tenant
+from .models import Domain, MediaAsset, Membership, QRCode, Site, SiteVersion, TeamInvitation, Tenant
 
 
 class MembershipSerializer(serializers.ModelSerializer):
@@ -12,6 +12,13 @@ class MembershipSerializer(serializers.ModelSerializer):
         model = Membership
         fields = ["id", "user", "email", "name", "role", "is_active", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class TeamInvitationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TeamInvitation
+        fields = ["id", "tenant", "email", "role", "status", "expires_at", "invited_by", "accepted_by", "accepted_at", "created_at"]
+        read_only_fields = fields
 
 
 class TenantSerializer(serializers.ModelSerializer):
