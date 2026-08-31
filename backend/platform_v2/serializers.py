@@ -122,6 +122,9 @@ class DraftPayloadSerializer(serializers.Serializer):
 
 
 class EventSerializer(serializers.Serializer):
-    event_type = serializers.ChoiceField(choices=["view", "cta_click"])
+    # Page views are emitted by the public read endpoint itself. Client-side
+    # ingestion is intentionally limited to explicit interactions to prevent
+    # accidental double-counting of views.
+    event_type = serializers.ChoiceField(choices=["cta_click"])
     target = serializers.CharField(max_length=80, required=False, allow_blank=True)
     metadata = serializers.JSONField(required=False)
