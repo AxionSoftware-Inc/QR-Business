@@ -10,7 +10,8 @@ from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import MediaAsset
+from .entitlements import enforce_media_create
+from .models import MediaAsset, Tenant
 from .serializers import MediaAssetSerializer
 from .views import can_write, user_tenant_ids
 
@@ -50,6 +51,9 @@ class MediaAssetViewSet(viewsets.ViewSet):
             return Response({"detail": "Valid tenant membership is required."}, status=status.HTTP_403_FORBIDDEN)
         if not can_write(request.user, tenant_id):
             return Response({"detail": "Editor, admin, or owner role required."}, status=status.HTTP_403_FORBIDDEN)
+        tenant = Tenant.objects.filter(id=tenant_id).first()
+        if not tenant:
+            return Response({"detail": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND)
 
         uploaded = request.FILES.get("file")
         if not uploaded:
@@ -81,6 +85,7 @@ class MediaAssetViewSet(viewsets.ViewSet):
         if existing:
             return Response(MediaAssetSerializer(existing).data, status=status.HTTP_200_OK)
 
+        enforce_media_create(tenant)
         content_type, extension = media
         storage_key = f"tenant-media/{tenant_id}/{digest[:2]}/{digest}-{secrets.token_hex(4)}{extension}"
         saved_key = default_storage.save(storage_key, ContentFile(raw))
