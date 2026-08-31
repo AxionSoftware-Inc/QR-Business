@@ -24,19 +24,27 @@ def active_membership(user, tenant_id):
     ).first()
 
 
+def is_platform_staff(user):
+    return bool(user and user.is_authenticated and user.is_staff)
+
+
 class IsPlatformAdmin(BasePermission):
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.is_staff)
+        return is_platform_staff(request.user)
 
 
 class IsTenantMember(BasePermission):
     def has_object_permission(self, request, view, obj):
+        if is_platform_staff(request.user):
+            return True
         tenant_id = getattr(obj, "tenant_id", None) or getattr(obj, "id", None)
         return bool(active_membership(request.user, tenant_id))
 
 
 class CanEditTenantObject(BasePermission):
     def has_object_permission(self, request, view, obj):
+        if is_platform_staff(request.user):
+            return True
         tenant_id = getattr(obj, "tenant_id", None) or getattr(obj, "id", None)
         membership = active_membership(request.user, tenant_id)
         if not membership:
@@ -48,6 +56,8 @@ class CanEditTenantObject(BasePermission):
 
 class CanAdministerTenant(BasePermission):
     def has_object_permission(self, request, view, obj):
+        if is_platform_staff(request.user):
+            return True
         tenant_id = getattr(obj, "tenant_id", None) or getattr(obj, "id", None)
         membership = active_membership(request.user, tenant_id)
         return bool(membership and membership.role in ADMIN_ROLES)
