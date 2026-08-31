@@ -8,6 +8,7 @@ from .media_views import MediaAssetViewSet
 from .ops_views import ReadinessView
 from .public_routing_views import PublicHostResolverView
 from .team_views import OwnershipTransferView, TeamInvitationAcceptView, TeamInvitationListCreateView, TeamInvitationRevokeView, TeamMemberDetailView
+from .tls_views import TLSApprovalView
 from .views import DomainViewSet, HealthView, PublicEventView, PublicSiteBySlugView, QRCodeViewSet, QRRedirectView, SiteViewSet, TenantViewSet
 
 router = DefaultRouter()
@@ -31,6 +32,7 @@ urlpatterns = [
     path("team/members/<uuid:membership_id>/", TeamMemberDetailView.as_view(), name="v2-team-member"),
     path("tenants/<uuid:tenant_id>/team/transfer-ownership/", OwnershipTransferView.as_view(), name="v2-team-transfer-ownership"),
     path("public/resolve-host/", PublicHostResolverView.as_view(), name="v2-public-resolve-host"),
+    path("public/tls-allow/", TLSApprovalView.as_view(), name="v2-public-tls-allow"),
     path("public/sites/<slug:tenant_slug>/", PublicDefaultSiteView.as_view(), name="v2-public-default-site"),
     path("public/sites/<slug:tenant_slug>/<slug:site_slug>/", PublicSiteBySlugView.as_view(), name="v2-public-site"),
     path("public/sites/<uuid:site_id>/events/", PublicEventView.as_view(), name="v2-public-event"),
