@@ -5,6 +5,7 @@ type GuestBuilderPageProps = {
   searchParams: Promise<{
     plan?: string;
     site?: string;
+    tenant?: string;
   }>;
 };
 
@@ -14,6 +15,6 @@ function resolvePlan(plan?: string): GuestPlan {
 }
 
 export default async function GuestBuilderPage({ searchParams }: GuestBuilderPageProps) {
-  const { plan, site } = await searchParams;
-  return <V2Builder initialPlan={resolvePlan(plan)} siteId={site} />;
+  const { plan, site, tenant } = await searchParams;
+  return <V2Builder initialPlan={resolvePlan(plan)} siteId={site} tenantId={tenant} />;
 }
