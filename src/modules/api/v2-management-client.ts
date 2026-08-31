@@ -57,6 +57,21 @@ export type V2QRCode = {
   is_active: boolean;
 };
 
+export type V2MediaAsset = {
+  id: string;
+  tenant: string;
+  kind: "image";
+  url: string;
+  original_name: string;
+  content_type: "image/jpeg" | "image/png" | "image/webp";
+  byte_size: number;
+  width: number;
+  height: number;
+  sha256: string;
+  alt: string;
+  created_at: string;
+};
+
 export type V2Analytics = {
   totals: Array<{ event_type: "view" | "qr_scan" | "cta_click"; count: number }>;
   top_targets: Array<{ target: string; count: number }>;
@@ -172,6 +187,23 @@ export function createV2QRCode(input: { tenant: string; site: string; label?: st
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+}
+
+export async function uploadV2Image(input: { tenant: string; file: File; alt?: string }) {
+  const form = new FormData();
+  form.append("tenant", input.tenant);
+  form.append("file", input.file);
+  if (input.alt) form.append("alt", input.alt);
+  const response = await authorizedV2Fetch("/api/v2/media/", { method: "POST", body: form });
+  if (!response.ok) {
+    let detail = `Upload failed (${response.status})`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) detail = payload.detail;
+    } catch {}
+    throw new Error(detail);
+  }
+  return (await response.json()) as V2MediaAsset;
 }
 
 export async function fetchV2QRCodeBlob(qrId: string, format: "png" | "svg" = "png") {
