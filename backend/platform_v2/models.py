@@ -66,6 +66,32 @@ class Membership(TimeStampedModel):
         indexes = [models.Index(fields=["user", "is_active"])]
 
 
+class TeamInvitation(TimeStampedModel):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        REVOKED = "revoked", "Revoked"
+        EXPIRED = "expired", "Expired"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, related_name="team_invitations", on_delete=models.CASCADE)
+    invited_by = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="qr_team_invitations_sent", null=True, blank=True, on_delete=models.SET_NULL)
+    email = models.EmailField()
+    role = models.CharField(max_length=20, choices=Membership.Role.choices, default=Membership.Role.EDITOR)
+    token_hash = models.CharField(max_length=64, unique=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    expires_at = models.DateTimeField()
+    accepted_by = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="qr_team_invitations_accepted", null=True, blank=True, on_delete=models.SET_NULL)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["tenant", "status"], name="v2_inv_tenant_status_idx"),
+            models.Index(fields=["email", "status"], name="v2_inv_email_status_idx"),
+        ]
+        ordering = ["-created_at"]
+
+
 class Identity(TimeStampedModel):
     class Provider(models.TextChoices):
         GOOGLE = "google", "Google"
