@@ -1,6 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from .compat_views import PublicDefaultSiteView
 from .views import (
     DomainViewSet,
     HealthView,
@@ -21,6 +22,11 @@ router.register("qr-codes", QRCodeViewSet, basename="v2-qr-code")
 
 urlpatterns = [
     path("health/", HealthView.as_view(), name="v2-health"),
+    path(
+        "public/sites/<slug:tenant_slug>/",
+        PublicDefaultSiteView.as_view(),
+        name="v2-public-default-site",
+    ),
     path(
         "public/sites/<slug:tenant_slug>/<slug:site_slug>/",
         PublicSiteBySlugView.as_view(),
