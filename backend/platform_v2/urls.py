@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .auth_views import GoogleLoginView, LogoutView, MeView, SessionRefreshView
 from .compat_views import PublicDefaultSiteView
+from .media_views import MediaAssetViewSet
 from .views import (
     DomainViewSet,
     HealthView,
@@ -20,6 +21,7 @@ router.register("tenants", TenantViewSet, basename="v2-tenant")
 router.register("sites", SiteViewSet, basename="v2-site")
 router.register("domains", DomainViewSet, basename="v2-domain")
 router.register("qr-codes", QRCodeViewSet, basename="v2-qr-code")
+router.register("media", MediaAssetViewSet, basename="v2-media")
 
 urlpatterns = [
     path("health/", HealthView.as_view(), name="v2-health"),
@@ -27,24 +29,10 @@ urlpatterns = [
     path("auth/refresh/", SessionRefreshView.as_view(), name="v2-auth-refresh"),
     path("auth/logout/", LogoutView.as_view(), name="v2-auth-logout"),
     path("auth/me/", MeView.as_view(), name="v2-auth-me"),
-    path(
-        "public/sites/<slug:tenant_slug>/",
-        PublicDefaultSiteView.as_view(),
-        name="v2-public-default-site",
-    ),
-    path(
-        "public/sites/<slug:tenant_slug>/<slug:site_slug>/",
-        PublicSiteBySlugView.as_view(),
-        name="v2-public-site",
-    ),
-    path(
-        "public/sites/<uuid:site_id>/events/",
-        PublicEventView.as_view(),
-        name="v2-public-event",
-    ),
+    path("public/sites/<slug:tenant_slug>/", PublicDefaultSiteView.as_view(), name="v2-public-default-site"),
+    path("public/sites/<slug:tenant_slug>/<slug:site_slug>/", PublicSiteBySlugView.as_view(), name="v2-public-site"),
+    path("public/sites/<uuid:site_id>/events/", PublicEventView.as_view(), name="v2-public-event"),
     path("", include(router.urls)),
 ]
 
-public_redirect_patterns = [
-    path("q/<str:code>/", QRRedirectView.as_view(), name="v2-qr-redirect"),
-]
+public_redirect_patterns = [path("q/<str:code>/", QRRedirectView.as_view(), name="v2-qr-redirect")]
