@@ -6,6 +6,12 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+SLUG_VALIDATOR = django.core.validators.RegexValidator(
+    regex=r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$",
+    message="Slug must be lowercase ASCII letters, numbers, and hyphens.",
+)
+
+
 class Migration(migrations.Migration):
     initial = True
 
@@ -19,7 +25,7 @@ class Migration(migrations.Migration):
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
                 ("name", models.CharField(max_length=160)),
-                ("slug", models.CharField(max_length=63, unique=True, validators=[django.core.validators.RegexValidator(message="Slug must be lowercase ASCII letters, numbers, and hyphens.", regex="^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$\")])),
+                ("slug", models.CharField(max_length=63, unique=True, validators=[SLUG_VALIDATOR])),
                 ("status", models.CharField(choices=[("trial", "Trial"), ("active", "Active"), ("suspended", "Suspended"), ("archived", "Archived")], default="trial", max_length=20)),
                 ("plan", models.CharField(choices=[("free", "Free"), ("starter", "Starter"), ("pro", "Pro"), ("business", "Business")], default="free", max_length=20)),
                 ("locale", models.CharField(default="en", max_length=16)),
@@ -33,7 +39,7 @@ class Migration(migrations.Migration):
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ("slug", models.CharField(max_length=63, validators=[django.core.validators.RegexValidator(message="Slug must be lowercase ASCII letters, numbers, and hyphens.", regex="^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$\")])),
+                ("slug", models.CharField(max_length=63, validators=[SLUG_VALIDATOR])),
                 ("name", models.CharField(max_length=180)),
                 ("status", models.CharField(choices=[("draft", "Draft"), ("published", "Published"), ("disabled", "Disabled")], default="draft", max_length=20)),
                 ("published_at", models.DateTimeField(blank=True, null=True)),
@@ -139,18 +145,9 @@ class Migration(migrations.Migration):
             ],
             options={"ordering": ["-created_at"]},
         ),
-        migrations.AddConstraint(
-            model_name="site",
-            constraint=models.UniqueConstraint(fields=("tenant", "slug"), name="v2_unique_site_slug_per_tenant"),
-        ),
-        migrations.AddConstraint(
-            model_name="siteversion",
-            constraint=models.UniqueConstraint(fields=("site", "version"), name="v2_unique_site_version"),
-        ),
-        migrations.AddConstraint(
-            model_name="membership",
-            constraint=models.UniqueConstraint(fields=("tenant", "user"), name="v2_unique_tenant_member"),
-        ),
+        migrations.AddConstraint(model_name="site", constraint=models.UniqueConstraint(fields=("tenant", "slug"), name="v2_unique_site_slug_per_tenant")),
+        migrations.AddConstraint(model_name="siteversion", constraint=models.UniqueConstraint(fields=("site", "version"), name="v2_unique_site_version")),
+        migrations.AddConstraint(model_name="membership", constraint=models.UniqueConstraint(fields=("tenant", "user"), name="v2_unique_tenant_member")),
         migrations.AddIndex(model_name="membership", index=models.Index(fields=["user", "is_active"], name="platform_v2_user_id_750028_idx")),
         migrations.AddIndex(model_name="site", index=models.Index(fields=["tenant", "status"], name="platform_v2_tenant__839968_idx")),
         migrations.AddIndex(model_name="site", index=models.Index(fields=["slug", "status"], name="platform_v2_slug_1d9535_idx")),
