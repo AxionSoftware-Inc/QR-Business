@@ -61,6 +61,7 @@ class SiteSerializer(serializers.ModelSerializer):
 
 class PublicSiteSerializer(serializers.ModelSerializer):
     site_id = serializers.UUIDField(source="id", read_only=True)
+    tenant_id = serializers.UUIDField(source="tenant.id", read_only=True)
     tenant_slug = serializers.CharField(source="tenant.slug", read_only=True)
     title = serializers.CharField(source="published_version.title", read_only=True)
     description = serializers.CharField(source="published_version.description", read_only=True)
@@ -74,6 +75,7 @@ class PublicSiteSerializer(serializers.ModelSerializer):
         model = Site
         fields = [
             "site_id",
+            "tenant_id",
             "tenant_slug",
             "slug",
             "name",
