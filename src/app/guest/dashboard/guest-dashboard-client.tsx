@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   createV2Domain,
@@ -110,7 +111,7 @@ export function GuestDashboardClient() {
       {sites.length === 0 ? (
         <div className="mt-5 rounded-lg bg-slate-50 p-5 ring-1 ring-black/5">
           <p className="font-semibold">Hali V2 sayt yo‘q</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Legacy saytlar migratsiya qilingach shu yerda ko‘rinadi. Yangi builder ham V2 draft/publish oqimiga ulanmoqda.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Legacy saytlar migratsiya qilingach shu yerda ko‘rinadi. Yangi builder ham V2 draft/publish oqimiga ulangan.</p>
           <Link className="mt-4 inline-flex min-h-11 items-center rounded-md bg-teal-700 px-4 text-sm font-semibold text-white" href="/guest/builder?plan=plus">
             Yangi sayt yaratish
           </Link>
