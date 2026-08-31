@@ -2,6 +2,16 @@
 
 import { authorizedV2Fetch } from "@/modules/auth/v2-session";
 
+export type V2Tenant = {
+  id: string;
+  name: string;
+  slug: string;
+  status: "trial" | "active" | "suspended" | "archived";
+  plan: "free" | "starter" | "pro" | "business";
+  locale: string;
+  timezone: string;
+};
+
 export type V2SiteVersion = {
   id: string;
   version: number;
@@ -52,6 +62,15 @@ export type V2Analytics = {
   top_targets: Array<{ target: string; count: number }>;
 };
 
+export type V2DraftPayload = {
+  title: string;
+  description?: string;
+  template_key?: string;
+  theme?: Record<string, unknown>;
+  blocks?: unknown[];
+  seo?: Record<string, unknown>;
+};
+
 async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await authorizedV2Fetch(path, init);
   if (!response.ok) {
@@ -65,8 +84,49 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
+export function listV2Tenants() {
+  return json<V2Tenant[]>("/api/v2/tenants/");
+}
+
+export function createV2Tenant(input: { name: string; slug: string; locale?: string; timezone?: string }) {
+  return json<V2Tenant>("/api/v2/tenants/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: input.name,
+      slug: input.slug,
+      locale: input.locale ?? "uz",
+      timezone: input.timezone ?? "Asia/Tashkent",
+    }),
+  });
+}
+
 export function listV2Sites() {
   return json<V2Site[]>("/api/v2/sites/");
+}
+
+export function getV2Site(siteId: string) {
+  return json<V2Site>(`/api/v2/sites/${siteId}/`);
+}
+
+export function createV2Site(input: { tenant: string; slug: string; name: string }) {
+  return json<V2Site>("/api/v2/sites/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function saveV2Draft(siteId: string, payload: V2DraftPayload) {
+  return json<V2SiteVersion>(`/api/v2/sites/${siteId}/draft/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function publishV2Site(siteId: string) {
+  return json<V2SiteVersion>(`/api/v2/sites/${siteId}/publish/`, { method: "POST" });
 }
 
 export function listV2Domains() {
