@@ -1,14 +1,19 @@
+from io import BytesIO
+
+import dns.resolver
+import qrcode
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count, Q
-from django.http import HttpResponseRedirect
+from django.db.models import Count
+from django.http import HttpResponse, HttpResponseRedirect
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import AnalyticsEvent, Domain, Membership, QRCode, Site, Tenant
+from .models import AnalyticsEvent, AuditLog, Domain, Membership, QRCode, Site, Tenant
 from .permissions import ADMIN_ROLES, WRITE_ROLES, CanAdministerTenant, CanEditTenantObject
 from .serializers import (
     DomainSerializer,
@@ -62,11 +67,7 @@ class TenantViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def perform_create(self, serializer):
         tenant = serializer.save(status=Tenant.Status.TRIAL, plan=Tenant.Plan.FREE)
-        Membership.objects.create(
-            tenant=tenant,
-            user=self.request.user,
-            role=Membership.Role.OWNER,
-        )
+        Membership.objects.create(tenant=tenant, user=self.request.user, role=Membership.Role.OWNER)
 
     def perform_update(self, serializer):
         tenant = self.get_object()
@@ -187,6 +188,43 @@ class DomainViewSet(viewsets.ModelViewSet):
             raise ValidationError({"site": "Site must belong to the selected tenant."})
         serializer.save(kind=Domain.Kind.CUSTOM, status=Domain.Status.PENDING)
 
+    @action(detail=True, methods=["get", "post"], url_path="verification")
+    def verification(self, request, pk=None):
+        domain = self.get_object()
+        if not can_admin(request.user, domain.tenant_id):
+            return Response({"detail": "Owner or admin role required."}, status=403)
+        record_name = f"_qr-business.{domain.hostname}"
+        expected = f"qr-business-verification={domain.verification_token}"
+        if request.method == "GET":
+            return Response({
+                "hostname": domain.hostname,
+                "record_type": "TXT",
+                "record_name": record_name,
+                "record_value": expected,
+                "status": domain.status,
+            })
+
+        observed = []
+        try:
+            answers = dns.resolver.resolve(record_name, "TXT", lifetime=4.0)
+            observed = [b"".join(answer.strings).decode("utf-8", errors="replace") for answer in answers]
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.NoNameservers, dns.exception.Timeout):
+            observed = []
+
+        verified = expected in observed
+        domain.status = Domain.Status.VERIFIED if verified else Domain.Status.PENDING
+        domain.verified_at = timezone.now() if verified else None
+        domain.save(update_fields=["status", "verified_at", "updated_at"])
+        AuditLog.objects.create(
+            tenant=domain.tenant,
+            actor=request.user,
+            action="domain.verify",
+            object_type="domain",
+            object_id=str(domain.id),
+            metadata={"hostname": domain.hostname, "verified": verified},
+        )
+        return Response({"hostname": domain.hostname, "verified": verified, "status": domain.status, "observed": observed})
+
 
 class QRCodeViewSet(viewsets.ModelViewSet):
     serializer_class = QRCodeSerializer
@@ -208,6 +246,31 @@ class QRCodeViewSet(viewsets.ModelViewSet):
             raise ValidationError({"site": "Site must belong to the selected tenant."})
         serializer.save()
 
+    @action(detail=True, methods=["get"], url_path="image")
+    def image(self, request, pk=None):
+        qr = self.get_object()
+        public_api_base = request.build_absolute_uri("/").rstrip("/")
+        target = f"{public_api_base}/q/{qr.code}/"
+        image_format = str(request.query_params.get("format") or "png").lower()
+        if image_format == "svg":
+            from qrcode.image.svg import SvgPathImage
+
+            image = qrcode.make(target, image_factory=SvgPathImage)
+            buffer = BytesIO()
+            image.save(buffer)
+            content_type = "image/svg+xml"
+            extension = "svg"
+        else:
+            image = qrcode.make(target)
+            buffer = BytesIO()
+            image.save(buffer, format="PNG")
+            content_type = "image/png"
+            extension = "png"
+        response = HttpResponse(buffer.getvalue(), content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{qr.site.slug}-{qr.code}.{extension}"'
+        response["Cache-Control"] = "private, max-age=300"
+        return response
+
 
 class PublicSiteBySlugView(APIView):
     permission_classes = [AllowAny]
@@ -227,7 +290,6 @@ class PublicSiteBySlugView(APIView):
         )
         if not site:
             return Response({"detail": "Site not found."}, status=404)
-        record_event(request=request, site=site, event_type=AnalyticsEvent.EventType.VIEW)
         response = Response(PublicSiteSerializer(site).data)
         response["Cache-Control"] = "public, max-age=30, stale-while-revalidate=300"
         return response
