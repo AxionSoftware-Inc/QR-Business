@@ -62,9 +62,7 @@ class Membership(TimeStampedModel):
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["tenant", "user"], name="v2_unique_tenant_member"),
-        ]
+        constraints = [models.UniqueConstraint(fields=["tenant", "user"], name="v2_unique_tenant_member")]
         indexes = [models.Index(fields=["user", "is_active"])]
 
 
@@ -79,9 +77,7 @@ class Identity(TimeStampedModel):
     email = models.EmailField(blank=True)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["provider", "subject"], name="v2_unique_external_identity"),
-        ]
+        constraints = [models.UniqueConstraint(fields=["provider", "subject"], name="v2_unique_external_identity")]
         indexes = [models.Index(fields=["user", "provider"])]
 
 
@@ -95,10 +91,7 @@ class AuthSession(models.Model):
     last_used_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        indexes = [
-            models.Index(fields=["user", "revoked_at"]),
-            models.Index(fields=["expires_at"]),
-        ]
+        indexes = [models.Index(fields=["user", "revoked_at"]), models.Index(fields=["expires_at"])]
         ordering = ["-created_at"]
 
 
@@ -113,30 +106,13 @@ class Site(TimeStampedModel):
     slug = models.CharField(max_length=63, validators=[slug_validator])
     name = models.CharField(max_length=180)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
-    draft_version = models.ForeignKey(
-        "SiteVersion",
-        related_name="draft_for_sites",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-    )
-    published_version = models.ForeignKey(
-        "SiteVersion",
-        related_name="published_for_sites",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-    )
+    draft_version = models.ForeignKey("SiteVersion", related_name="draft_for_sites", null=True, blank=True, on_delete=models.SET_NULL)
+    published_version = models.ForeignKey("SiteVersion", related_name="published_for_sites", null=True, blank=True, on_delete=models.SET_NULL)
     published_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["tenant", "slug"], name="v2_unique_site_slug_per_tenant"),
-        ]
-        indexes = [
-            models.Index(fields=["tenant", "status"]),
-            models.Index(fields=["slug", "status"]),
-        ]
+        constraints = [models.UniqueConstraint(fields=["tenant", "slug"], name="v2_unique_site_slug_per_tenant")]
+        indexes = [models.Index(fields=["tenant", "status"]), models.Index(fields=["slug", "status"])]
 
     def __str__(self) -> str:
         return self.name
@@ -152,19 +128,11 @@ class SiteVersion(models.Model):
     theme = models.JSONField(default=dict)
     blocks = models.JSONField(default=list)
     seo = models.JSONField(default=dict)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        related_name="qr_site_versions",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-    )
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="qr_site_versions", null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["site", "version"], name="v2_unique_site_version"),
-        ]
+        constraints = [models.UniqueConstraint(fields=["site", "version"], name="v2_unique_site_version")]
         ordering = ["-version"]
 
 
@@ -213,6 +181,28 @@ class QRCode(TimeStampedModel):
         super().save(*args, **kwargs)
 
 
+class MediaAsset(TimeStampedModel):
+    class Kind(models.TextChoices):
+        IMAGE = "image", "Image"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, related_name="media_assets", on_delete=models.CASCADE)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="qr_media_assets", null=True, blank=True, on_delete=models.SET_NULL)
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.IMAGE)
+    storage_key = models.CharField(max_length=500, unique=True)
+    original_name = models.CharField(max_length=255, blank=True)
+    content_type = models.CharField(max_length=100)
+    byte_size = models.PositiveBigIntegerField()
+    width = models.PositiveIntegerField()
+    height = models.PositiveIntegerField()
+    sha256 = models.CharField(max_length=64)
+    alt = models.CharField(max_length=240, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["tenant", "created_at"]), models.Index(fields=["tenant", "sha256"])]
+        ordering = ["-created_at"]
+
+
 class AnalyticsEvent(models.Model):
     class EventType(models.TextChoices):
         VIEW = "view", "View"
@@ -222,13 +212,7 @@ class AnalyticsEvent(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant = models.ForeignKey(Tenant, related_name="analytics_events", on_delete=models.CASCADE)
     site = models.ForeignKey(Site, related_name="analytics_events", on_delete=models.CASCADE)
-    qr_code = models.ForeignKey(
-        QRCode,
-        related_name="analytics_events",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-    )
+    qr_code = models.ForeignKey(QRCode, related_name="analytics_events", null=True, blank=True, on_delete=models.SET_NULL)
     event_type = models.CharField(max_length=20, choices=EventType.choices)
     target = models.CharField(max_length=80, blank=True)
     visitor_hash = models.CharField(max_length=64, blank=True)
@@ -249,13 +233,7 @@ class AnalyticsEvent(models.Model):
 class AuditLog(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant = models.ForeignKey(Tenant, related_name="audit_logs", null=True, blank=True, on_delete=models.SET_NULL)
-    actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        related_name="qr_audit_logs",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-    )
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="qr_audit_logs", null=True, blank=True, on_delete=models.SET_NULL)
     action = models.CharField(max_length=120)
     object_type = models.CharField(max_length=80, blank=True)
     object_id = models.CharField(max_length=64, blank=True)
