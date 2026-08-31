@@ -12,6 +12,7 @@ import {
   listV2QRCodes,
   publishV2Site,
   saveV2Draft,
+  uploadV2Image,
   type V2Site,
 } from "@/modules/api/v2-management-client";
 import { getCachedV2User, refreshV2Session } from "@/modules/auth/v2-session";
@@ -34,6 +35,7 @@ export function V2Builder({ initialPlan, siteId }: { initialPlan: GuestPlan; sit
   const [draft, setDraft] = useState<GuestDraft>(() => getDraftForPlan(initialPlan, defaultGuestDraft));
   const [remoteSite, setRemoteSite] = useState<V2Site | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "saving" | "publishing" | "signed-out" | "error">("loading");
+  const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -102,6 +104,26 @@ export function V2Builder({ initialPlan, siteId }: { initialPlan: GuestPlan; sit
     return site;
   }
 
+  async function uploadCover(file: File | null) {
+    if (!file) return;
+    if (!isValid) {
+      setMessage("Rasm yuklashdan oldin biznes nomi va slugni kiriting.");
+      return;
+    }
+    setUploading(true);
+    setMessage("");
+    try {
+      const site = await ensureSite();
+      const asset = await uploadV2Image({ tenant: site.tenant, file, alt: `${draft.businessName} cover` });
+      patch("coverUrl", asset.url);
+      setMessage(`Rasm xavfsiz tekshirildi va saqlandi: ${asset.width}×${asset.height}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Rasm yuklanmadi.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function saveDraftOnly() {
     if (!isValid) {
       setMessage("Biznes nomi va kamida 3 belgili slug kerak.");
@@ -167,6 +189,8 @@ export function V2Builder({ initialPlan, siteId }: { initialPlan: GuestPlan; sit
     );
   }
 
+  const busy = status === "saving" || status === "publishing" || uploading;
+
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#eef7f4_0%,#f6f7fb_34%,#eef1f6_100%)] px-4 py-5 text-slate-950 sm:px-6">
       <div className="mx-auto max-w-[1500px]">
@@ -177,10 +201,10 @@ export function V2Builder({ initialPlan, siteId }: { initialPlan: GuestPlan; sit
             <p className="mt-1 text-sm text-slate-500">Draft alohida saqlanadi; publish live snapshotni atomik almashtiradi.</p>
           </div>
           <div className="flex gap-2">
-            <button className="min-h-11 rounded-md bg-white px-4 text-sm font-semibold ring-1 ring-black/10 disabled:opacity-50" disabled={!isValid || status === "saving" || status === "publishing"} onClick={() => void saveDraftOnly()} type="button">
+            <button className="min-h-11 rounded-md bg-white px-4 text-sm font-semibold ring-1 ring-black/10 disabled:opacity-50" disabled={!isValid || busy} onClick={() => void saveDraftOnly()} type="button">
               {status === "saving" ? "Saqlanyapti..." : "Draft saqlash"}
             </button>
-            <button className="min-h-11 rounded-md bg-teal-700 px-4 text-sm font-semibold text-white disabled:bg-slate-400" disabled={!isValid || status === "saving" || status === "publishing"} onClick={() => void publish()} type="button">
+            <button className="min-h-11 rounded-md bg-teal-700 px-4 text-sm font-semibold text-white disabled:bg-slate-400" disabled={!isValid || busy} onClick={() => void publish()} type="button">
               {status === "publishing" ? "Publish..." : "Publish"}
             </button>
           </div>
@@ -205,11 +229,17 @@ export function V2Builder({ initialPlan, siteId }: { initialPlan: GuestPlan; sit
               <Field label="Cover URL" value={draft.coverUrl} onChange={(value) => patch("coverUrl", value)} />
             </div>
 
+            <label className="grid gap-1.5 rounded-md bg-slate-50 p-3 ring-1 ring-black/5">
+              <span className="text-xs font-semibold text-slate-500">Cover rasm upload</span>
+              <input accept="image/jpeg,image/png,image/webp" disabled={uploading} onChange={(event) => void uploadCover(event.target.files?.[0] ?? null)} type="file" />
+              <span className="text-xs leading-5 text-slate-500">JPEG, PNG yoki WebP. Maksimum 8 MB; SVG qabul qilinmaydi.</span>
+            </label>
+
             <div>
               <p className="text-sm font-semibold">Template</p>
               <div className="mt-2 grid grid-cols-3 gap-2">
                 {(["oddiy", "plus", "pro"] as GuestPlan[]).map((plan) => (
-                  <button className={draft.plan === plan ? "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white" : "rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-black/5"} key={plan} onClick={() => setDraft(getDraftForPlan(plan, draft))} type="button">{plan}</button>
+                  <button className={draft.plan === plan ? "rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white" : "rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold ring-1 ring-black/5"} key={plan} onClick={() => patch("plan", getDraftForPlan(plan, draft).plan) || setDraft(getDraftForPlan(plan, draft))} type="button">{plan}</button>
                 ))}
               </div>
             </div>
