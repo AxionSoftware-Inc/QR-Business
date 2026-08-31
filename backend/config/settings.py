@@ -22,7 +22,8 @@ if ENABLE_LEGACY_IMPORT:
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware", "django.middleware.security.SecurityMiddleware", "django.middleware.gzip.GZipMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware", "django.middleware.common.CommonMiddleware", "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware", "django.contrib.messages.middleware.MessageMiddleware", "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware", "platform_v2.middleware.RequestContextMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware", "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 ROOT_URLCONF = "config.urls"
 TEMPLATES = [{"BACKEND":"django.template.backends.django.DjangoTemplates","DIRS":[],"APP_DIRS":True,"OPTIONS":{"context_processors":["django.template.context_processors.request","django.contrib.auth.context_processors.auth","django.contrib.messages.context_processors.messages"]}}]
@@ -81,4 +82,10 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 SECURE_HSTS_PRELOAD = not DEBUG
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
-LOGGING = {"version":1,"disable_existing_loggers":False,"formatters":{"standard":{"format":"%(asctime)s %(levelname)s %(name)s %(message)s"}},"handlers":{"console":{"class":"logging.StreamHandler","formatter":"standard"}},"root":{"handlers":["console"],"level":os.getenv("DJANGO_LOG_LEVEL","INFO")}}
+LOGGING = {
+    "version":1,"disable_existing_loggers":False,
+    "formatters":{"standard":{"format":"%(asctime)s %(levelname)s %(name)s %(message)s"}},
+    "handlers":{"console":{"class":"logging.StreamHandler","formatter":"standard"}},
+    "loggers":{"qr.access":{"handlers":["console"],"level":os.getenv("DJANGO_ACCESS_LOG_LEVEL","INFO"),"propagate":False}},
+    "root":{"handlers":["console"],"level":os.getenv("DJANGO_LOG_LEVEL","INFO")},
+}
