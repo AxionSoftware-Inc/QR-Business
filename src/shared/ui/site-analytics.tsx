@@ -10,19 +10,20 @@ type SiteViewTrackerProps = {
 };
 
 function isV2SiteId(siteId: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    siteId,
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(siteId);
+}
+
+function isLegacyDatabaseId(siteId: string) {
+  return /^\d+$/.test(siteId);
 }
 
 export function SiteViewTracker({ siteId }: SiteViewTrackerProps) {
   useEffect(() => {
-    if (!siteId || siteId.startsWith("site_") || isV2SiteId(siteId)) {
-      // V2 records the view atomically in the server-side public read endpoint.
-      // Keeping this call for V2 would double-count every page view.
+    if (!isLegacyDatabaseId(siteId)) {
+      // V2 view events are recorded server-side on public read. Preview/mock ids
+      // must never emit analytics traffic.
       return;
     }
-
     void trackSiteEventInBackend({ eventType: "view", siteId });
   }, [siteId]);
 
@@ -34,29 +35,15 @@ type TrackedLinkProps = React.AnchorHTMLAttributes<HTMLAnchorElement> & {
   targetName: string;
 };
 
-export function TrackedLink({
-  onClick,
-  siteId,
-  targetName,
-  ...props
-}: TrackedLinkProps) {
+export function TrackedLink({ onClick, siteId, targetName, ...props }: TrackedLinkProps) {
   return (
     <a
       {...props}
       onClick={(event) => {
-        if (siteId && !siteId.startsWith("site_")) {
-          if (isV2SiteId(siteId)) {
-            void trackPublicCtaInV2({
-              siteId,
-              target: targetName,
-            });
-          } else {
-            void trackSiteEventInBackend({
-              eventType: "click",
-              siteId,
-              target: targetName,
-            });
-          }
+        if (isV2SiteId(siteId)) {
+          void trackPublicCtaInV2({ siteId, target: targetName });
+        } else if (isLegacyDatabaseId(siteId)) {
+          void trackSiteEventInBackend({ eventType: "click", siteId, target: targetName });
         }
         onClick?.(event);
       }}
