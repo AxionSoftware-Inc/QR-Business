@@ -2,16 +2,16 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import AnalyticsEvent, Site, Tenant
+from .models import Site, Tenant
 from .serializers import PublicSiteSerializer
-from .services import record_event
 
 
 class PublicDefaultSiteView(APIView):
     """Resolve a tenant's default published site using the legacy one-slug URL.
 
     This endpoint exists only for controlled frontend cutover. New product routes
-    should use the explicit tenant + site slug endpoint.
+    should use the explicit tenant + site slug endpoint. Analytics are not emitted
+    here because SSR/metadata fetches are not user page views.
     """
 
     permission_classes = [AllowAny]
@@ -32,7 +32,6 @@ class PublicDefaultSiteView(APIView):
         if not site:
             return Response({"detail": "Site not found."}, status=404)
 
-        record_event(request=request, site=site, event_type=AnalyticsEvent.EventType.VIEW)
         response = Response(PublicSiteSerializer(site).data)
         response["Cache-Control"] = "public, max-age=30, stale-while-revalidate=300"
         response["Deprecation"] = "true"
