@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .auth_views import GoogleLoginView, LogoutView, MeView, SessionRefreshView
 from .compat_views import PublicDefaultSiteView
 from .media_views import MediaAssetViewSet
+from .team_views import TeamInvitationAcceptView, TeamInvitationListCreateView, TeamInvitationRevokeView
 from .views import (
     DomainViewSet,
     HealthView,
@@ -29,6 +30,9 @@ urlpatterns = [
     path("auth/refresh/", SessionRefreshView.as_view(), name="v2-auth-refresh"),
     path("auth/logout/", LogoutView.as_view(), name="v2-auth-logout"),
     path("auth/me/", MeView.as_view(), name="v2-auth-me"),
+    path("team/invitations/accept/", TeamInvitationAcceptView.as_view(), name="v2-team-invite-accept"),
+    path("tenants/<uuid:tenant_id>/team/invitations/", TeamInvitationListCreateView.as_view(), name="v2-team-invitations"),
+    path("team/invitations/<uuid:invitation_id>/revoke/", TeamInvitationRevokeView.as_view(), name="v2-team-invite-revoke"),
     path("public/sites/<slug:tenant_slug>/", PublicDefaultSiteView.as_view(), name="v2-public-default-site"),
     path("public/sites/<slug:tenant_slug>/<slug:site_slug>/", PublicSiteBySlugView.as_view(), name="v2-public-site"),
     path("public/sites/<uuid:site_id>/events/", PublicEventView.as_view(), name="v2-public-event"),
