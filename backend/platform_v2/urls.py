@@ -5,13 +5,8 @@ from .auth_views import GoogleLoginView, LogoutView, MeView, SessionRefreshView
 from .billing_views import BillingWebhookView
 from .compat_views import PublicDefaultSiteView
 from .media_views import MediaAssetViewSet
-from .team_views import (
-    OwnershipTransferView,
-    TeamInvitationAcceptView,
-    TeamInvitationListCreateView,
-    TeamInvitationRevokeView,
-    TeamMemberDetailView,
-)
+from .public_routing_views import PublicHostResolverView
+from .team_views import OwnershipTransferView, TeamInvitationAcceptView, TeamInvitationListCreateView, TeamInvitationRevokeView, TeamMemberDetailView
 from .views import DomainViewSet, HealthView, PublicEventView, PublicSiteBySlugView, QRCodeViewSet, QRRedirectView, SiteViewSet, TenantViewSet
 
 router = DefaultRouter()
@@ -33,6 +28,7 @@ urlpatterns = [
     path("team/invitations/<uuid:invitation_id>/revoke/", TeamInvitationRevokeView.as_view(), name="v2-team-invite-revoke"),
     path("team/members/<uuid:membership_id>/", TeamMemberDetailView.as_view(), name="v2-team-member"),
     path("tenants/<uuid:tenant_id>/team/transfer-ownership/", OwnershipTransferView.as_view(), name="v2-team-transfer-ownership"),
+    path("public/resolve-host/", PublicHostResolverView.as_view(), name="v2-public-resolve-host"),
     path("public/sites/<slug:tenant_slug>/", PublicDefaultSiteView.as_view(), name="v2-public-default-site"),
     path("public/sites/<slug:tenant_slug>/<slug:site_slug>/", PublicSiteBySlugView.as_view(), name="v2-public-site"),
     path("public/sites/<uuid:site_id>/events/", PublicEventView.as_view(), name="v2-public-event"),
