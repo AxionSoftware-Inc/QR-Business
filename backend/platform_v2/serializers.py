@@ -1,6 +1,7 @@
+from django.core.files.storage import default_storage
 from rest_framework import serializers
 
-from .models import Domain, Membership, QRCode, Site, SiteVersion, Tenant
+from .models import Domain, MediaAsset, Membership, QRCode, Site, SiteVersion, Tenant
 
 
 class MembershipSerializer(serializers.ModelSerializer):
@@ -23,18 +24,7 @@ class TenantSerializer(serializers.ModelSerializer):
 class SiteVersionSerializer(serializers.ModelSerializer):
     class Meta:
         model = SiteVersion
-        fields = [
-            "id",
-            "version",
-            "title",
-            "description",
-            "template_key",
-            "theme",
-            "blocks",
-            "seo",
-            "created_by",
-            "created_at",
-        ]
+        fields = ["id", "version", "title", "description", "template_key", "theme", "blocks", "seo", "created_by", "created_at"]
         read_only_fields = fields
 
 
@@ -44,18 +34,7 @@ class SiteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Site
-        fields = [
-            "id",
-            "tenant",
-            "slug",
-            "name",
-            "status",
-            "draft",
-            "published",
-            "published_at",
-            "created_at",
-            "updated_at",
-        ]
+        fields = ["id", "tenant", "slug", "name", "status", "draft", "published", "published_at", "created_at", "updated_at"]
         read_only_fields = ["id", "status", "published_at", "created_at", "updated_at"]
 
 
@@ -73,37 +52,13 @@ class PublicSiteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Site
-        fields = [
-            "site_id",
-            "tenant_id",
-            "tenant_slug",
-            "slug",
-            "name",
-            "title",
-            "description",
-            "template_key",
-            "theme",
-            "blocks",
-            "seo",
-            "version",
-            "published_at",
-        ]
+        fields = ["site_id", "tenant_id", "tenant_slug", "slug", "name", "title", "description", "template_key", "theme", "blocks", "seo", "version", "published_at"]
 
 
 class DomainSerializer(serializers.ModelSerializer):
     class Meta:
         model = Domain
-        fields = [
-            "id",
-            "tenant",
-            "site",
-            "hostname",
-            "kind",
-            "status",
-            "verified_at",
-            "created_at",
-            "updated_at",
-        ]
+        fields = ["id", "tenant", "site", "hostname", "kind", "status", "verified_at", "created_at", "updated_at"]
         read_only_fields = ["id", "status", "verified_at", "created_at", "updated_at"]
 
 
@@ -112,6 +67,18 @@ class QRCodeSerializer(serializers.ModelSerializer):
         model = QRCode
         fields = ["id", "tenant", "site", "code", "label", "campaign", "is_active", "created_at", "updated_at"]
         read_only_fields = ["id", "code", "created_at", "updated_at"]
+
+
+class MediaAssetSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MediaAsset
+        fields = ["id", "tenant", "kind", "url", "original_name", "content_type", "byte_size", "width", "height", "sha256", "alt", "created_at"]
+        read_only_fields = fields
+
+    def get_url(self, obj):
+        return default_storage.url(obj.storage_key)
 
 
 class DraftPayloadSerializer(serializers.Serializer):
@@ -124,9 +91,6 @@ class DraftPayloadSerializer(serializers.Serializer):
 
 
 class EventSerializer(serializers.Serializer):
-    # Page views are emitted by the public read endpoint itself. Client-side
-    # ingestion is intentionally limited to explicit interactions to prevent
-    # accidental double-counting of views.
     event_type = serializers.ChoiceField(choices=["cta_click"])
     target = serializers.CharField(max_length=80, required=False, allow_blank=True)
     metadata = serializers.JSONField(required=False)
