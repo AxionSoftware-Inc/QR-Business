@@ -4,7 +4,6 @@ function getApiBaseUrl() {
   if (typeof window !== "undefined") {
     return process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
   }
-
   return process.env.API_BASE_URL ?? "http://127.0.0.1:8000";
 }
 
@@ -87,9 +86,10 @@ export async function findPublishedSiteByTenantAndSiteFromV2(tenantSlug: string,
   return site ? normalizePublicSite(site) : null;
 }
 
-export async function trackPublicCtaInV2(input: {
+async function trackPublicEventInV2(input: {
   siteId: string;
-  target: string;
+  eventType: "view" | "cta_click";
+  target?: string;
   metadata?: Record<string, string | number | boolean | null>;
 }) {
   const controller = new AbortController();
@@ -99,8 +99,8 @@ export async function trackPublicCtaInV2(input: {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({
-        event_type: "cta_click",
-        target: input.target,
+        event_type: input.eventType,
+        target: input.target ?? "",
         metadata: input.metadata ?? {},
       }),
       keepalive: true,
@@ -112,4 +112,21 @@ export async function trackPublicCtaInV2(input: {
   } finally {
     globalThis.clearTimeout(timeout);
   }
+}
+
+export function trackPublicViewInV2(siteId: string) {
+  return trackPublicEventInV2({ siteId, eventType: "view" });
+}
+
+export function trackPublicCtaInV2(input: {
+  siteId: string;
+  target: string;
+  metadata?: Record<string, string | number | boolean | null>;
+}) {
+  return trackPublicEventInV2({
+    siteId: input.siteId,
+    eventType: "cta_click",
+    target: input.target,
+    metadata: input.metadata,
+  });
 }
