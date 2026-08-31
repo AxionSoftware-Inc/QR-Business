@@ -91,6 +91,6 @@ class DraftPayloadSerializer(serializers.Serializer):
 
 
 class EventSerializer(serializers.Serializer):
-    event_type = serializers.ChoiceField(choices=["cta_click"])
+    event_type = serializers.ChoiceField(choices=["view", "cta_click"])
     target = serializers.CharField(max_length=80, required=False, allow_blank=True)
     metadata = serializers.JSONField(required=False)
