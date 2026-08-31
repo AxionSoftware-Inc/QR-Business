@@ -1,6 +1,17 @@
 from django.contrib import admin
 
-from .models import AnalyticsEvent, AuditLog, Domain, Membership, QRCode, Site, SiteVersion, Tenant
+from .models import (
+    AnalyticsEvent,
+    AuditLog,
+    AuthSession,
+    Domain,
+    Identity,
+    Membership,
+    QRCode,
+    Site,
+    SiteVersion,
+    Tenant,
+)
 
 
 @admin.register(Tenant)
@@ -15,6 +26,37 @@ class MembershipAdmin(admin.ModelAdmin):
     list_display = ("tenant", "user", "role", "is_active", "created_at")
     list_filter = ("role", "is_active")
     search_fields = ("tenant__name", "tenant__slug", "user__username", "user__email")
+
+
+@admin.register(Identity)
+class IdentityAdmin(admin.ModelAdmin):
+    list_display = ("provider", "user", "email", "created_at")
+    list_filter = ("provider",)
+    search_fields = ("email", "subject", "user__username", "user__email")
+    readonly_fields = ("provider", "subject", "email", "user", "created_at", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(AuthSession)
+class AuthSessionAdmin(admin.ModelAdmin):
+    list_display = ("user", "expires_at", "revoked_at", "last_used_at", "created_at")
+    list_filter = ("revoked_at",)
+    search_fields = ("user__username", "user__email")
+    readonly_fields = tuple(field.name for field in AuthSession._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Site)
