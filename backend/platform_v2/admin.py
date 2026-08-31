@@ -6,6 +6,7 @@ from .models import (
     AuthSession,
     Domain,
     Identity,
+    MediaAsset,
     Membership,
     QRCode,
     Site,
@@ -93,6 +94,19 @@ class QRCodeAdmin(admin.ModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("code", "label", "campaign", "tenant__name", "site__name")
     readonly_fields = ("code",)
+
+
+@admin.register(MediaAsset)
+class MediaAssetAdmin(admin.ModelAdmin):
+    list_display = ("original_name", "tenant", "content_type", "byte_size", "width", "height", "created_at")
+    search_fields = ("original_name", "sha256", "tenant__name", "tenant__slug")
+    readonly_fields = tuple(field.name for field in MediaAsset._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(AnalyticsEvent)
