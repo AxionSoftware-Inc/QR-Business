@@ -10,11 +10,15 @@ load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 ALLOWED_HOSTS = [host.strip() for host in os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",") if host.strip()]
+ENABLE_LEGACY_IMPORT = os.getenv("ENABLE_LEGACY_IMPORT", "False").lower() == "true"
 
 INSTALLED_APPS = [
     "django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions",
-    "django.contrib.messages", "django.contrib.staticfiles", "corsheaders", "rest_framework", "core", "platform_v2",
+    "django.contrib.messages", "django.contrib.staticfiles", "corsheaders", "rest_framework", "platform_v2",
 ]
+if ENABLE_LEGACY_IMPORT:
+    INSTALLED_APPS.append("core")
+
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware", "django.middleware.security.SecurityMiddleware", "django.middleware.gzip.GZipMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware", "django.middleware.common.CommonMiddleware", "django.middleware.csrf.CsrfViewMiddleware",
@@ -47,18 +51,21 @@ if S3_BUCKET_NAME:
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DEFAULT_RENDERER_CLASSES = ["rest_framework.renderers.JSONRenderer"]
-if DEBUG: DEFAULT_RENDERER_CLASSES.append("rest_framework.renderers.BrowsableAPIRenderer")
+if DEBUG:
+    DEFAULT_RENDERER_CLASSES.append("rest_framework.renderers.BrowsableAPIRenderer")
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES":["rest_framework_simplejwt.authentication.JWTAuthentication","rest_framework.authentication.SessionAuthentication"],
     "DEFAULT_RENDERER_CLASSES":DEFAULT_RENDERER_CLASSES,
     "DEFAULT_PARSER_CLASSES":["rest_framework.parsers.JSONParser","rest_framework.parsers.MultiPartParser","rest_framework.parsers.FormParser"],
     "DEFAULT_THROTTLE_CLASSES":["rest_framework.throttling.AnonRateThrottle","rest_framework.throttling.ScopedRateThrottle"],
     "DEFAULT_THROTTLE_RATES":{
-        "anon":os.getenv("THROTTLE_ANON","600/hour"), "guest_create":os.getenv("THROTTLE_GUEST_CREATE","20/hour"),
-        "guest_update":os.getenv("THROTTLE_GUEST_UPDATE","60/hour"), "slug_check":os.getenv("THROTTLE_SLUG_CHECK","120/min"),
-        "upload_media":os.getenv("THROTTLE_UPLOAD_MEDIA","30/hour"), "public_read":os.getenv("THROTTLE_PUBLIC_READ","1200/hour"),
-        "analytics_write":os.getenv("THROTTLE_ANALYTICS_WRITE","600/hour"), "qr_redirect":os.getenv("THROTTLE_QR_REDIRECT","1200/hour"),
-        "auth":os.getenv("THROTTLE_AUTH","60/hour"), "billing_webhook":os.getenv("THROTTLE_BILLING_WEBHOOK","300/hour"),
+        "anon":os.getenv("THROTTLE_ANON","600/hour"),
+        "upload_media":os.getenv("THROTTLE_UPLOAD_MEDIA","30/hour"),
+        "public_read":os.getenv("THROTTLE_PUBLIC_READ","1200/hour"),
+        "analytics_write":os.getenv("THROTTLE_ANALYTICS_WRITE","600/hour"),
+        "qr_redirect":os.getenv("THROTTLE_QR_REDIRECT","1200/hour"),
+        "auth":os.getenv("THROTTLE_AUTH","60/hour"),
+        "billing_webhook":os.getenv("THROTTLE_BILLING_WEBHOOK","300/hour"),
     },
 }
 SIMPLE_JWT = {"ACCESS_TOKEN_LIFETIME":timedelta(minutes=int(os.getenv("JWT_ACCESS_MINUTES","15"))),"REFRESH_TOKEN_LIFETIME":timedelta(days=int(os.getenv("JWT_REFRESH_DAYS","30"))),"ROTATE_REFRESH_TOKENS":True,"BLACKLIST_AFTER_ROTATION":False,"UPDATE_LAST_LOGIN":False}
