@@ -199,7 +199,10 @@ class MediaAsset(TimeStampedModel):
     alt = models.CharField(max_length=240, blank=True)
 
     class Meta:
-        indexes = [models.Index(fields=["tenant", "created_at"]), models.Index(fields=["tenant", "sha256"])]
+        indexes = [
+            models.Index(fields=["tenant", "created_at"], name="v2_media_tenant_created_idx"),
+            models.Index(fields=["tenant", "sha256"], name="v2_media_tenant_sha_idx"),
+        ]
         ordering = ["-created_at"]
 
 
