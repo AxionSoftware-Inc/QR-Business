@@ -10,10 +10,10 @@ from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from .access import can_write, user_tenant_ids
 from .entitlements import enforce_media_create
 from .models import MediaAsset, Tenant
 from .serializers import MediaAssetSerializer
-from .views import can_write, user_tenant_ids
 
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
@@ -28,6 +28,7 @@ ALLOWED_IMAGE_TYPES = {
 
 class MediaAssetViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
+    throttle_scope = "upload_media"
 
     def _queryset(self, request):
         return MediaAsset.objects.filter(tenant_id__in=user_tenant_ids(request.user)).select_related("tenant")
