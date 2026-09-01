@@ -47,6 +47,7 @@ function normalizePublicSite(site: V2PublicSite): PublishedSite {
     id: site.site_id,
     tenantId: site.tenant_id,
     tenantSlug: site.tenant_slug,
+    siteSlug: site.slug,
     title: site.title || site.name,
     description: site.description ?? "",
     templateKey: normalizeTemplateKey(site.template_key),
