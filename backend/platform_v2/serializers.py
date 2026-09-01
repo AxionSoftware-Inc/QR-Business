@@ -1,6 +1,7 @@
 from django.core.files.storage import default_storage
 from rest_framework import serializers
 
+from .entitlements import for_tenant
 from .models import Domain, MediaAsset, Membership, QRCode, Site, SiteVersion, TeamInvitation, Tenant
 
 
@@ -56,10 +57,14 @@ class PublicSiteSerializer(serializers.ModelSerializer):
     blocks = serializers.JSONField(source="published_version.blocks", read_only=True)
     seo = serializers.JSONField(source="published_version.seo", read_only=True)
     version = serializers.IntegerField(source="published_version.version", read_only=True)
+    show_platform_branding = serializers.SerializerMethodField()
+
+    def get_show_platform_branding(self, obj):
+        return not for_tenant(obj.tenant).remove_branding
 
     class Meta:
         model = Site
-        fields = ["site_id", "tenant_id", "tenant_slug", "slug", "name", "title", "description", "template_key", "theme", "blocks", "seo", "version", "published_at"]
+        fields = ["site_id", "tenant_id", "tenant_slug", "slug", "name", "title", "description", "template_key", "theme", "blocks", "seo", "version", "published_at", "show_platform_branding"]
 
 
 class DomainSerializer(serializers.ModelSerializer):
