@@ -159,3 +159,11 @@ class TLSApprovalTests(TestCase):
         Domain.objects.create(tenant=self.tenant, site=self.site, hostname="pending.example.com", kind=Domain.Kind.CUSTOM, status=Domain.Status.PENDING)
         response = APIClient().get("/api/v2/public/tls-allow/?domain=pending.example.com")
         self.assertEqual(response.status_code, 404)
+
+    def test_plan_downgrade_disables_verified_custom_domain_and_tls(self):
+        self.tenant.plan = Tenant.Plan.FREE
+        self.tenant.save(update_fields=["plan", "updated_at"])
+        resolver = APIClient().get("/api/v2/public/resolve-host/?host=verified.example.com")
+        tls = APIClient().get("/api/v2/public/tls-allow/?domain=verified.example.com")
+        self.assertEqual(resolver.status_code, 404)
+        self.assertEqual(tls.status_code, 404)
