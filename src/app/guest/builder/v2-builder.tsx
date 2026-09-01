@@ -197,7 +197,7 @@ export function V2Builder({ initialPlan, siteId, tenantId }: { initialPlan: Gues
             {panel === "advanced" ? <AdvancedEditor draft={draft} patch={patch} toggleBlock={toggleBlock} /> : null}
           </section>
 
-          <section className="min-w-0 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/5"><div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-600"><span>Live preview</span><span>/{slug || "slug"}</span></div><div className="max-h-[calc(100vh-110px)] overflow-auto bg-slate-100 p-3"><div className="mx-auto max-w-5xl overflow-hidden rounded-xl bg-white shadow-xl"><PublicSiteRenderer site={{ ...preview, tenantSlug: slug, status: "published" }} /></div></div></section>
+          <section className="min-w-0 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/5"><div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 text-sm font-semibold text-slate-600"><span>Live preview</span><span>/{slug || "slug"}</span></div><div className="max-h-[calc(100vh-110px)] overflow-auto bg-slate-100 p-3"><div className="mx-auto max-w-5xl overflow-hidden rounded-xl bg-white shadow-xl"><PublicSiteRenderer site={{ ...preview, tenantSlug: "preview", siteSlug: slug || "site", status: "published" }} /></div></div></section>
         </div>
       </div>
     </main>
@@ -230,5 +230,18 @@ function convertV2Site(site: V2Site): PublishedSite | null {
   const version = site.draft ?? site.published;
   if (!version) return null;
   const plan: GuestPlan = version.template_key === "oddiy" || version.template_key === "plus" || version.template_key === "pro" ? version.template_key : "plus";
-  return { id:site.id, tenantId:site.tenant, title:version.title, description:version.description, templateKey:plan, status:site.status, theme:version.theme as unknown as SiteTheme, blocks:version.blocks as SiteBlock[], publishedAt:site.published_at ?? version.created_at };
+  return {
+    id: site.id,
+    tenantId: site.tenant,
+    tenantSlug: "workspace-preview",
+    siteSlug: site.slug,
+    title: version.title,
+    description: version.description,
+    templateKey: plan,
+    status: site.status,
+    theme: version.theme as unknown as SiteTheme,
+    blocks: version.blocks as SiteBlock[],
+    publishedAt: site.published_at ?? version.created_at,
+    showPlatformBranding: true,
+  };
 }
