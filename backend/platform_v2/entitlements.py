@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from rest_framework.exceptions import PermissionDenied
 
-from .models import Domain, MediaAsset, Membership, Site, Tenant
+from .models import Domain, MediaAsset, Membership, Site, TeamInvitation, Tenant
 
 
 @dataclass(frozen=True)
@@ -57,6 +57,8 @@ def for_tenant(tenant: Tenant) -> PlanEntitlements:
 
 def entitlement_payload(tenant: Tenant):
     e = for_tenant(tenant)
+    active_members = Membership.objects.filter(tenant=tenant, is_active=True).count()
+    pending_invitations = TeamInvitation.objects.filter(tenant=tenant, status=TeamInvitation.Status.PENDING).count()
     return {
         "plan": tenant.plan,
         "limits": {
@@ -71,7 +73,9 @@ def entitlement_payload(tenant: Tenant):
         },
         "usage": {
             "sites": Site.objects.filter(tenant=tenant).exclude(status=Site.Status.DISABLED).count(),
-            "members": Membership.objects.filter(tenant=tenant, is_active=True).count(),
+            "members": active_members,
+            "pending_invitations": pending_invitations,
+            "reserved_member_seats": active_members + pending_invitations,
             "media_assets": MediaAsset.objects.filter(tenant=tenant).count(),
             "custom_domains": Domain.objects.filter(tenant=tenant, kind=Domain.Kind.CUSTOM).exclude(status=Domain.Status.DISABLED).count(),
         },
@@ -90,6 +94,14 @@ def enforce_member_create(tenant: Tenant):
     used = Membership.objects.filter(tenant=tenant, is_active=True).count()
     if used >= e.max_members:
         raise PermissionDenied("Your plan has reached its team-member limit.")
+
+
+def enforce_invitation_create(tenant: Tenant):
+    e = for_tenant(tenant)
+    active = Membership.objects.filter(tenant=tenant, is_active=True).count()
+    pending = TeamInvitation.objects.filter(tenant=tenant, status=TeamInvitation.Status.PENDING).count()
+    if active + pending >= e.max_members:
+        raise PermissionDenied("Your plan has no unreserved team seats available.")
 
 
 def enforce_media_create(tenant: Tenant):
