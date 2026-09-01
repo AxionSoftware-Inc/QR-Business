@@ -166,12 +166,13 @@ export function buildGuestSite(draft: GuestDraft): PublishedSite {
   const hours = draft.hours.map((x) => ({ day: clean(x.day), value: clean(x.value) })).filter((x) => x.day || x.value);
   const hasContact = Boolean(clean(draft.phone) || clean(draft.telegram) || clean(draft.instagram) || clean(draft.whatsapp) || clean(draft.website));
   const hasAddress = Boolean(clean(draft.address));
-  const tenantSlug = normalizeSlug(draft.slug) || "guest-preview";
+  const siteSlug = normalizeSlug(draft.slug) || "guest-preview";
 
   return {
     id: "guest-preview-site",
     tenantId: "guest-preview-tenant",
-    tenantSlug,
+    tenantSlug: "preview",
+    siteSlug,
     title: draft.businessName,
     description: draft.description,
     templateKey: draft.plan,
@@ -218,7 +219,7 @@ export function buildDraftFromSite(site: PublishedSite): GuestDraft {
     ...defaultGuestDraft,
     plan: site.templateKey,
     businessName: hero?.type === "hero" ? hero.data.businessName : site.title,
-    slug: site.tenantSlug,
+    slug: site.siteSlug,
     category: hero?.type === "hero" ? hero.data.category : "",
     description: hero?.type === "hero" ? hero.data.description : site.description,
     phone: contacts?.type === "contact_buttons" ? contacts.data.phone ?? "" : "",
