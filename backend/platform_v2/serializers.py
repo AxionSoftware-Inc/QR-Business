@@ -155,6 +155,8 @@ class QRCodeSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         validated_data.pop("tenant", None)
+        if not instance.is_active and validated_data.get("is_active") is True:
+            enforce_qr_create(instance.tenant)
         return super().update(instance, validated_data)
 
 
