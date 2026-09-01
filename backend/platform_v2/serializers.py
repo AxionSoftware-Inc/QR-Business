@@ -1,8 +1,43 @@
+import ipaddress
+import re
+import secrets
+from urllib.parse import urlparse
+
+from django.conf import settings
 from django.core.files.storage import default_storage
 from rest_framework import serializers
 
-from .entitlements import for_tenant
+from .entitlements import enforce_qr_create, for_tenant
 from .models import Domain, MediaAsset, Membership, QRCode, Site, SiteVersion, TeamInvitation, Tenant
+
+
+HOST_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+
+
+def normalize_custom_hostname(value: str) -> str:
+    raw = str(value or "").strip().lower().rstrip(".")
+    if not raw or "://" in raw or any(ch in raw for ch in "/?#@"):
+        raise serializers.ValidationError("Enter a hostname only, without scheme, path, port, query, or credentials.")
+    try:
+        hostname = raw.encode("idna").decode("ascii")
+    except UnicodeError as exc:
+        raise serializers.ValidationError("Hostname cannot be converted to a valid IDNA domain.") from exc
+    if len(hostname) > 253 or "." not in hostname:
+        raise serializers.ValidationError("Enter a fully-qualified domain name.")
+    labels = hostname.split(".")
+    if any(not HOST_LABEL_RE.fullmatch(label) for label in labels):
+        raise serializers.ValidationError("Hostname contains an invalid DNS label.")
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        pass
+    else:
+        raise serializers.ValidationError("IP addresses cannot be used as custom domains.")
+
+    platform_host = (urlparse(getattr(settings, "PUBLIC_WEB_BASE_URL", "")).hostname or "").lower().rstrip(".")
+    if platform_host and (hostname == platform_host or hostname.endswith(f".{platform_host}")):
+        raise serializers.ValidationError("The platform-owned domain cannot be claimed as a custom domain.")
+    return hostname
 
 
 class MembershipSerializer(serializers.ModelSerializer):
@@ -71,7 +106,31 @@ class DomainSerializer(serializers.ModelSerializer):
     class Meta:
         model = Domain
         fields = ["id", "tenant", "site", "hostname", "kind", "status", "verified_at", "created_at", "updated_at"]
-        read_only_fields = ["id", "status", "verified_at", "created_at", "updated_at"]
+        read_only_fields = ["id", "kind", "status", "verified_at", "created_at", "updated_at"]
+
+    def validate_hostname(self, value):
+        return normalize_custom_hostname(value)
+
+    def validate(self, attrs):
+        tenant = self.instance.tenant if self.instance else attrs.get("tenant")
+        requested_tenant = attrs.get("tenant")
+        if self.instance and requested_tenant and requested_tenant.id != self.instance.tenant_id:
+            raise serializers.ValidationError({"tenant": "A domain cannot be moved between tenants."})
+        site = attrs.get("site", self.instance.site if self.instance else None)
+        if tenant and site and site.tenant_id != tenant.id:
+            raise serializers.ValidationError({"site": "Site must belong to the domain tenant."})
+        return attrs
+
+    def update(self, instance, validated_data):
+        validated_data.pop("tenant", None)
+        previous_hostname = instance.hostname
+        instance = super().update(instance, validated_data)
+        if instance.hostname != previous_hostname:
+            instance.status = Domain.Status.PENDING
+            instance.verified_at = None
+            instance.verification_token = secrets.token_urlsafe(48)
+            instance.save(update_fields=["status", "verified_at", "verification_token", "updated_at"])
+        return instance
 
 
 class QRCodeSerializer(serializers.ModelSerializer):
@@ -79,6 +138,24 @@ class QRCodeSerializer(serializers.ModelSerializer):
         model = QRCode
         fields = ["id", "tenant", "site", "code", "label", "campaign", "is_active", "created_at", "updated_at"]
         read_only_fields = ["id", "code", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        tenant = self.instance.tenant if self.instance else attrs.get("tenant")
+        requested_tenant = attrs.get("tenant")
+        if self.instance and requested_tenant and requested_tenant.id != self.instance.tenant_id:
+            raise serializers.ValidationError({"tenant": "A QR code cannot be moved between tenants."})
+        site = attrs.get("site", self.instance.site if self.instance else None)
+        if tenant and site and site.tenant_id != tenant.id:
+            raise serializers.ValidationError({"site": "Site must belong to the QR-code tenant."})
+        return attrs
+
+    def create(self, validated_data):
+        enforce_qr_create(validated_data["tenant"])
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data.pop("tenant", None)
+        return super().update(instance, validated_data)
 
 
 class MediaAssetSerializer(serializers.ModelSerializer):
