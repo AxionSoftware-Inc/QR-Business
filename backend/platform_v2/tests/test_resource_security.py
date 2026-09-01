@@ -50,6 +50,22 @@ class ResourceSecurityTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["hostname"], "xn--tst-qla.example")
 
+    def test_pro_plan_enforces_custom_domain_count_limit(self):
+        for index in range(10):
+            Domain.objects.create(
+                tenant=self.tenant,
+                site=self.site,
+                hostname=f"domain-{index}.example.com",
+                kind=Domain.Kind.CUSTOM,
+                status=Domain.Status.PENDING,
+            )
+        blocked = self.client.post(
+            "/api/v2/domains/",
+            {"tenant": str(self.tenant.id), "site": str(self.site.id), "hostname": "domain-overflow.example.com"},
+            format="json",
+        )
+        self.assertEqual(blocked.status_code, 403)
+
     def test_domain_cannot_move_to_another_tenant_or_site(self):
         domain = Domain.objects.create(
             tenant=self.tenant,
