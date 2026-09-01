@@ -172,15 +172,7 @@ export type SiteBlock =
 export type PublishedSite = {
   id: string;
   tenantId: string;
-  tenantSlug?: string;
-  ownerToken?: string;
-  ownerContact?: string;
-  ownerRecoveryCode?: string;
-  domains?: Array<{
-    hostname: string;
-    status: "pending" | "verified" | "blocked";
-    type: "subdomain" | "custom";
-  }>;
+  tenantSlug: string;
   title: string;
   description: string;
   templateKey: "oddiy" | "plus" | "pro";
@@ -188,4 +180,5 @@ export type PublishedSite = {
   theme: SiteTheme;
   blocks: SiteBlock[];
   publishedAt: string;
+  showPlatformBranding: boolean;
 };
