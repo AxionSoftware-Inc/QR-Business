@@ -82,10 +82,20 @@ class Command(BaseCommand):
                     if domain.site_id != main_site_id:
                         failures.append(f"domain-site-mismatch:{hostname}")
                 if legacy_domain.type == LegacyDomain.Type.CUSTOM:
-                    # V2 deliberately does not inherit the legacy verification trust bit.
-                    # A custom domain must remain pending until the new TXT proof succeeds.
-                    if domain.kind != Domain.Kind.CUSTOM or domain.status != Domain.Status.PENDING or domain.verified_at is not None:
-                        failures.append(f"custom-domain-reverification-mismatch:{hostname}")
+                    if domain.kind != Domain.Kind.CUSTOM:
+                        failures.append(f"custom-domain-kind-mismatch:{hostname}")
+                    elif domain.status == Domain.Status.PENDING:
+                        # This is the required state immediately after import because legacy
+                        # verification trust is deliberately not inherited.
+                        if domain.verified_at is not None:
+                            failures.append(f"custom-domain-pending-timestamp-mismatch:{hostname}")
+                    elif domain.status == Domain.Status.VERIFIED:
+                        # A later V2 TXT verification is a valid advancement and must not make
+                        # parity fail after the customer has completed the new proof.
+                        if domain.verified_at is None:
+                            failures.append(f"custom-domain-verified-timestamp-mismatch:{hostname}")
+                    else:
+                        failures.append(f"custom-domain-status-mismatch:{hostname}")
 
         self.stdout.write(
             f"checked tenants={checked['tenants']} sites={checked['sites']} domains={checked['domains']}"
