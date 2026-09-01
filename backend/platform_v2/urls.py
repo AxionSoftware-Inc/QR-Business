@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .auth_views import GoogleLoginView, LogoutView, MeView, SessionRefreshView
 from .billing_views import BillingWebhookView
+from .catalog_views import PublicPlanCatalogView
 from .compat_views import PublicDefaultSiteView
 from .media_views import MediaAssetViewSet
 from .ops_views import ReadinessView
@@ -21,6 +22,7 @@ router.register("media", MediaAssetViewSet, basename="v2-media")
 urlpatterns = [
     path("health/", HealthView.as_view(), name="v2-health"),
     path("ready/", ReadinessView.as_view(), name="v2-ready"),
+    path("plans/", PublicPlanCatalogView.as_view(), name="v2-plan-catalog"),
     path("auth/google/", GoogleLoginView.as_view(), name="v2-auth-google"),
     path("auth/refresh/", SessionRefreshView.as_view(), name="v2-auth-refresh"),
     path("auth/logout/", LogoutView.as_view(), name="v2-auth-logout"),
