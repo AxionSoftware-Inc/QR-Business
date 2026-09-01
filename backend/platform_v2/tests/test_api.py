@@ -40,6 +40,17 @@ class PlatformV2SecurityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["results"], [])
 
+    def test_suspended_tenant_disappears_from_private_api_for_member(self):
+        self.tenant_a.status = Tenant.Status.SUSPENDED
+        self.tenant_a.save(update_fields=["status", "updated_at"])
+        listed = self.client_for(self.owner_a).get("/api/v2/sites/")
+        detail = self.client_for(self.owner_a).get(f"/api/v2/sites/{self.site_a.id}/")
+        tenant = self.client_for(self.owner_a).get(f"/api/v2/tenants/{self.tenant_a.id}/")
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()["results"], [])
+        self.assertEqual(detail.status_code, 404)
+        self.assertEqual(tenant.status_code, 404)
+
     def test_cross_tenant_site_detail_is_not_visible(self):
         response = self.client_for(self.owner_a).get(f"/api/v2/sites/{self.site_b.id}/")
         self.assertEqual(response.status_code, 404)
