@@ -25,12 +25,20 @@ class PlatformV2SecurityTests(TestCase):
         client.force_authenticate(user=user)
         return client
 
-    def test_site_list_is_tenant_scoped(self):
+    def test_site_list_is_paginated_and_tenant_scoped(self):
         response = self.client_for(self.owner_a).get("/api/v2/sites/")
         self.assertEqual(response.status_code, 200)
-        returned_ids = {row["id"] for row in response.json()}
+        payload = response.json()
+        self.assertIn("results", payload)
+        self.assertIn("count", payload)
+        returned_ids = {row["id"] for row in payload["results"]}
         self.assertIn(str(self.site_a.id), returned_ids)
         self.assertNotIn(str(self.site_b.id), returned_ids)
+
+    def test_explicit_tenant_filter_cannot_escape_membership_scope(self):
+        response = self.client_for(self.owner_a).get(f"/api/v2/sites/?tenant={self.tenant_b.id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"], [])
 
     def test_cross_tenant_site_detail_is_not_visible(self):
         response = self.client_for(self.owner_a).get(f"/api/v2/sites/{self.site_b.id}/")
@@ -49,36 +57,17 @@ class PlatformV2PublishingTests(TestCase):
         self.site = Site.objects.create(tenant=self.tenant, slug="main", name="Main")
 
     def test_publish_creates_immutable_snapshot_and_future_draft_does_not_change_live(self):
-        draft_one = save_draft(
-            site=self.site,
-            actor=self.owner,
-            payload={
-                "title": "Version one",
-                "blocks": [{"id": "hero", "type": "hero", "data": {"headline": "One"}}],
-            },
-        )
+        draft_one = save_draft(site=self.site, actor=self.owner, payload={"title":"Version one","blocks":[{"id":"hero","type":"hero","data":{"headline":"One"}}]})
         published = publish_site(site=self.site, actor=self.owner)
         self.assertNotEqual(draft_one.id, published.id)
         self.assertEqual(published.title, "Version one")
-
-        save_draft(
-            site=self.site,
-            actor=self.owner,
-            payload={
-                "title": "Version two draft",
-                "blocks": [{"id": "hero", "type": "hero", "data": {"headline": "Two"}}],
-            },
-        )
+        save_draft(site=self.site, actor=self.owner, payload={"title":"Version two draft","blocks":[{"id":"hero","type":"hero","data":{"headline":"Two"}}]})
         self.site.refresh_from_db()
         self.assertEqual(self.site.published_version_id, published.id)
         self.assertEqual(self.site.published_version.title, "Version one")
 
     def test_public_endpoint_returns_only_published_version(self):
-        save_draft(
-            site=self.site,
-            actor=self.owner,
-            payload={"title": "Live title", "blocks": [{"id": "hero", "type": "hero", "data": {}}]},
-        )
+        save_draft(site=self.site, actor=self.owner, payload={"title":"Live title","blocks":[{"id":"hero","type":"hero","data":{}}]})
         publish_site(site=self.site, actor=self.owner)
         response = APIClient().get("/api/v2/public/sites/demo/main/")
         self.assertEqual(response.status_code, 200)
