@@ -6,6 +6,7 @@ import qrcode
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Count
+from django.db.models.functions import TruncDate
 from django.http import HttpResponse, HttpResponseRedirect
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -59,6 +60,11 @@ def can_admin(user, tenant_id):
     return bool(membership and membership.role in ADMIN_ROLES)
 
 
+def filter_tenant_param(queryset, request):
+    tenant_id = str(request.query_params.get("tenant") or "").strip()
+    return queryset.filter(tenant_id=tenant_id) if tenant_id else queryset
+
+
 class TenantViewSet(viewsets.ModelViewSet):
     serializer_class = TenantSerializer
     permission_classes = [IsAuthenticated]
@@ -98,13 +104,53 @@ class TenantViewSet(viewsets.ModelViewSet):
         tenant = self.get_object()
         return Response(entitlement_payload(tenant))
 
+    @action(detail=True, methods=["get"], url_path="analytics")
+    def analytics(self, request, pk=None):
+        tenant = self.get_object()
+        events = AnalyticsEvent.objects.filter(tenant=tenant)
+        totals = list(events.values("event_type").annotate(count=Count("id")).order_by("event_type"))
+        per_site_rows = events.values("site_id", "event_type").annotate(count=Count("id")).order_by("site_id", "event_type")
+        per_site = {}
+        for row in per_site_rows:
+            site_id = str(row["site_id"])
+            bucket = per_site.setdefault(site_id, {"totals": [], "top_targets": []})
+            bucket["totals"].append({"event_type": row["event_type"], "count": row["count"]})
+
+        target_rows = (
+            events.filter(event_type=AnalyticsEvent.EventType.CTA_CLICK)
+            .exclude(target="")
+            .values("site_id", "target")
+            .annotate(count=Count("id"))
+            .order_by("site_id", "-count")
+        )
+        target_counts = {}
+        for row in target_rows:
+            site_id = str(row["site_id"])
+            seen = target_counts.get(site_id, 0)
+            if seen >= 20:
+                continue
+            bucket = per_site.setdefault(site_id, {"totals": [], "top_targets": []})
+            bucket["top_targets"].append({"target": row["target"], "count": row["count"]})
+            target_counts[site_id] = seen + 1
+
+        response = {"totals": totals, "sites": per_site}
+        if for_tenant(tenant).advanced_analytics:
+            response["daily"] = list(
+                events.annotate(day=TruncDate("occurred_at"))
+                .values("day", "event_type")
+                .annotate(count=Count("id"))
+                .order_by("day", "event_type")[-360:]
+            )
+        return Response(response)
+
 
 class SiteViewSet(viewsets.ModelViewSet):
     serializer_class = SiteSerializer
     permission_classes = [IsAuthenticated, CanEditTenantObject]
 
     def get_queryset(self):
-        return Site.objects.filter(tenant_id__in=user_tenant_ids(self.request.user)).select_related("tenant", "draft_version", "published_version").distinct()
+        queryset = Site.objects.filter(tenant_id__in=user_tenant_ids(self.request.user)).select_related("tenant", "draft_version", "published_version").distinct()
+        return filter_tenant_param(queryset, self.request)
 
     def perform_create(self, serializer):
         tenant = serializer.validated_data["tenant"]
@@ -161,10 +207,10 @@ class SiteViewSet(viewsets.ModelViewSet):
         response = {"totals": list(totals), "top_targets": list(targets)}
         if for_tenant(site.tenant).advanced_analytics:
             response["daily"] = list(
-                events.extra(select={"day": "DATE(occurred_at)"})
+                events.annotate(day=TruncDate("occurred_at"))
                 .values("day", "event_type")
                 .annotate(count=Count("id"))
-                .order_by("day")[-90:]
+                .order_by("day", "event_type")[-90:]
             )
         return Response(response)
 
@@ -174,7 +220,8 @@ class DomainViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, CanAdministerTenant]
 
     def get_queryset(self):
-        return Domain.objects.filter(tenant_id__in=user_tenant_ids(self.request.user)).select_related("tenant", "site")
+        queryset = Domain.objects.filter(tenant_id__in=user_tenant_ids(self.request.user)).select_related("tenant", "site")
+        return filter_tenant_param(queryset, self.request)
 
     def perform_create(self, serializer):
         tenant = serializer.validated_data["tenant"]
@@ -216,7 +263,8 @@ class QRCodeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, CanEditTenantObject]
 
     def get_queryset(self):
-        return QRCode.objects.filter(tenant_id__in=user_tenant_ids(self.request.user)).select_related("tenant", "site")
+        queryset = QRCode.objects.filter(tenant_id__in=user_tenant_ids(self.request.user)).select_related("tenant", "site")
+        return filter_tenant_param(queryset, self.request)
 
     def perform_create(self, serializer):
         tenant = serializer.validated_data["tenant"]
