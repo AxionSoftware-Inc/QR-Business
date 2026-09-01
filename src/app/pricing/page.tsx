@@ -10,15 +10,15 @@ type PublicPlan = {
   key: "free" | "starter" | "pro" | "business";
   name: string;
   description: string;
-  limits: { sites: number; members: number; media_assets: number };
+  limits: { sites: number; members: number; media_assets: number; qr_codes: number; custom_domains: number };
   features: { custom_domains: boolean; advanced_analytics: boolean; remove_branding: boolean };
 };
 
 const FALLBACK_PLANS: PublicPlan[] = [
-  { key: "free", name: "Free", description: "Bitta biznes sahifani ishga tushirish va QR oqimini sinash uchun.", limits: { sites: 1, members: 1, media_assets: 25 }, features: { custom_domains: false, advanced_analytics: false, remove_branding: false } },
-  { key: "starter", name: "Starter", description: "Kichik biznes uchun bir nechta sahifa, ko‘proq media va analytics.", limits: { sites: 3, members: 1, media_assets: 250 }, features: { custom_domains: false, advanced_analytics: true, remove_branding: true } },
-  { key: "pro", name: "Pro", description: "Custom domain, team hamkorligi va professional public presence uchun.", limits: { sites: 10, members: 3, media_assets: 2000 }, features: { custom_domains: true, advanced_analytics: true, remove_branding: true } },
-  { key: "business", name: "Business", description: "Ko‘p sayt, katta team va yuqori media limiti kerak bo‘lgan tashkilotlar uchun.", limits: { sites: 100, members: 25, media_assets: 20000 }, features: { custom_domains: true, advanced_analytics: true, remove_branding: true } },
+  { key: "free", name: "Free", description: "Bitta biznes sahifani ishga tushirish va QR oqimini sinash uchun.", limits: { sites: 1, members: 1, media_assets: 25, qr_codes: 5, custom_domains: 0 }, features: { custom_domains: false, advanced_analytics: false, remove_branding: false } },
+  { key: "starter", name: "Starter", description: "Kichik biznes uchun bir nechta sahifa, ko‘proq media va analytics.", limits: { sites: 3, members: 1, media_assets: 250, qr_codes: 25, custom_domains: 0 }, features: { custom_domains: false, advanced_analytics: true, remove_branding: true } },
+  { key: "pro", name: "Pro", description: "Custom domain, team hamkorligi va professional public presence uchun.", limits: { sites: 10, members: 3, media_assets: 2000, qr_codes: 250, custom_domains: 10 }, features: { custom_domains: true, advanced_analytics: true, remove_branding: true } },
+  { key: "business", name: "Business", description: "Ko‘p sayt, katta team va yuqori media limiti kerak bo‘lgan tashkilotlar uchun.", limits: { sites: 100, members: 25, media_assets: 20000, qr_codes: 2500, custom_domains: 100 }, features: { custom_domains: true, advanced_analytics: true, remove_branding: true } },
 ];
 
 async function loadPlans(): Promise<PublicPlan[]> {
@@ -61,10 +61,11 @@ export default async function PricingPage() {
                 <p className={featured ? "mt-4 min-h-20 text-sm leading-6 text-white/72" : "mt-4 min-h-20 text-sm leading-6 text-slate-600"}>{plan.description}</p>
                 <div className={featured ? "mt-5 space-y-2 border-t border-white/12 pt-5 text-sm text-white/85" : "mt-5 space-y-2 border-t border-slate-100 pt-5 text-sm text-slate-600"}>
                   <PlanRow label="Sayt" value={String(plan.limits.sites)} />
+                  <PlanRow label="Dynamic QR" value={plan.limits.qr_codes.toLocaleString("en-US")} />
                   <PlanRow label="Team a’zosi" value={String(plan.limits.members)} />
                   <PlanRow label="Media" value={plan.limits.media_assets.toLocaleString("en-US")} />
+                  <PlanRow label="Custom domain" value={plan.limits.custom_domains ? String(plan.limits.custom_domains) : "—"} />
                   <PlanFeature label="Advanced analytics" on={plan.features.advanced_analytics} />
-                  <PlanFeature label="Custom domain" on={plan.features.custom_domains} />
                   <PlanFeature label="Brandingni olib tashlash" on={plan.features.remove_branding} />
                 </div>
                 <Link className={featured ? "mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-white px-5 text-sm font-semibold text-slate-900 hover:bg-slate-100" : "mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 hover:bg-slate-50"} href={plan.key === "free" ? "/guest/builder?plan=plus" : "/login?next=/guest/settings"}>
