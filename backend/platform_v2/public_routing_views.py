@@ -2,6 +2,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .entitlements import for_tenant
 from .models import Domain, Site, Tenant
 
 
@@ -25,7 +26,7 @@ class PublicHostResolverView(APIView):
             )
             .first()
         )
-        if not domain:
+        if not domain or not for_tenant(domain.tenant).custom_domains:
             return Response({"detail": "Host not found."}, status=404)
 
         site = domain.site
