@@ -48,6 +48,7 @@ export function saveV2Draft(siteId:string,payload:V2DraftPayload){return json<V2
 export const publishV2Site=(siteId:string)=>json<V2SiteVersion>(`/api/v2/sites/${siteId}/publish/`,{method:"POST"});
 export const listV2Domains=(tenantId?:string)=>listJson<V2Domain>(withTenant("/api/v2/domains/",tenantId));
 export const listV2QRCodes=(tenantId?:string)=>listJson<V2QRCode>(withTenant("/api/v2/qr-codes/",tenantId));
+export const listV2PrimaryQRCodes=(tenantId:string)=>json<V2QRCode[]>(`/api/v2/tenants/${tenantId}/workspace/primary-qr-codes/`);
 export const getV2SiteAnalytics=(siteId:string)=>json<V2Analytics>(`/api/v2/sites/${siteId}/analytics/`);
 export function createV2Domain(input:{tenant:string;site?:string;hostname:string}){return json<V2Domain>("/api/v2/domains/",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({tenant:input.tenant,site:input.site||null,hostname:input.hostname})});}
 export const getV2DomainVerification=(domainId:string)=>json<{hostname:string;record_type:"TXT";record_name:string;record_value:string;status:V2Domain["status"]}>(`/api/v2/domains/${domainId}/verification/`);
