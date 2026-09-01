@@ -8,7 +8,7 @@ from django.core.files.storage import default_storage
 from rest_framework import serializers
 
 from .entitlements import enforce_qr_create, for_tenant
-from .models import Domain, MediaAsset, Membership, QRCode, Site, SiteVersion, TeamInvitation, Tenant
+from .models import AuditLog, Domain, MediaAsset, Membership, QRCode, Site, SiteVersion, TeamInvitation, Tenant
 
 
 HOST_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
@@ -38,6 +38,12 @@ def normalize_custom_hostname(value: str) -> str:
     if platform_host and (hostname == platform_host or hostname.endswith(f".{platform_host}")):
         raise serializers.ValidationError("The platform-owned domain cannot be claimed as a custom domain.")
     return hostname
+
+
+def _actor(serializer):
+    request = serializer.context.get("request") if serializer.context else None
+    user = getattr(request, "user", None)
+    return user if user and user.is_authenticated else None
 
 
 class MembershipSerializer(serializers.ModelSerializer):
@@ -121,15 +127,44 @@ class DomainSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"site": "Site must belong to the domain tenant."})
         return attrs
 
+    def create(self, validated_data):
+        instance = super().create(validated_data)
+        AuditLog.objects.create(
+            tenant=instance.tenant,
+            actor=_actor(self),
+            action="domain.created",
+            object_type="domain",
+            object_id=str(instance.id),
+            metadata={"hostname": instance.hostname, "site_id": str(instance.site_id or "")},
+        )
+        return instance
+
     def update(self, instance, validated_data):
         validated_data.pop("tenant", None)
         previous_hostname = instance.hostname
+        previous_site_id = instance.site_id
         instance = super().update(instance, validated_data)
-        if instance.hostname != previous_hostname:
+        hostname_changed = instance.hostname != previous_hostname
+        if hostname_changed:
             instance.status = Domain.Status.PENDING
             instance.verified_at = None
             instance.verification_token = secrets.token_urlsafe(48)
             instance.save(update_fields=["status", "verified_at", "verification_token", "updated_at"])
+        if hostname_changed or instance.site_id != previous_site_id:
+            AuditLog.objects.create(
+                tenant=instance.tenant,
+                actor=_actor(self),
+                action="domain.updated",
+                object_type="domain",
+                object_id=str(instance.id),
+                metadata={
+                    "hostname_from": previous_hostname,
+                    "hostname_to": instance.hostname,
+                    "site_from": str(previous_site_id or ""),
+                    "site_to": str(instance.site_id or ""),
+                    "verification_reset": hostname_changed,
+                },
+            )
         return instance
 
 
@@ -151,13 +186,34 @@ class QRCodeSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         enforce_qr_create(validated_data["tenant"])
-        return super().create(validated_data)
+        instance = super().create(validated_data)
+        AuditLog.objects.create(
+            tenant=instance.tenant,
+            actor=_actor(self),
+            action="qr.created",
+            object_type="qr_code",
+            object_id=str(instance.id),
+            metadata={"site_id": str(instance.site_id), "label": instance.label, "campaign": instance.campaign},
+        )
+        return instance
 
     def update(self, instance, validated_data):
         validated_data.pop("tenant", None)
         if not instance.is_active and validated_data.get("is_active") is True:
             enforce_qr_create(instance.tenant)
-        return super().update(instance, validated_data)
+        before = {"site_id": str(instance.site_id), "label": instance.label, "campaign": instance.campaign, "is_active": instance.is_active}
+        instance = super().update(instance, validated_data)
+        after = {"site_id": str(instance.site_id), "label": instance.label, "campaign": instance.campaign, "is_active": instance.is_active}
+        if before != after:
+            AuditLog.objects.create(
+                tenant=instance.tenant,
+                actor=_actor(self),
+                action="qr.updated",
+                object_type="qr_code",
+                object_id=str(instance.id),
+                metadata={"before": before, "after": after},
+            )
+        return instance
 
 
 class MediaAssetSerializer(serializers.ModelSerializer):
