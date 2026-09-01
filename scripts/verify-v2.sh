@@ -28,6 +28,26 @@ if grep -R --line-number --exclude-dir='__pycache__' -E 'path\("api/", include\(
   exit 1
 fi
 
+if ! grep -q 'showPlatformBranding: boolean' src/modules/sites/types.ts; then
+  echo "PublishedSite branding contract is missing." >&2
+  exit 1
+fi
+
+if ! grep -q 'show_platform_branding = serializers.SerializerMethodField' backend/platform_v2/serializers.py; then
+  echo "Public branding entitlement is missing from backend serializer." >&2
+  exit 1
+fi
+
+if ! grep -q 'site.showPlatformBranding ?' src/modules/sites/public-site-renderer.tsx; then
+  echo "Public renderer does not condition platform branding on entitlement." >&2
+  exit 1
+fi
+
+if ! grep -q 'showPlatformBranding: true' src/modules/guest/guest-site-factory.ts; then
+  echo "Builder preview is not aligned with PublishedSite branding contract." >&2
+  exit 1
+fi
+
 printf '\n== QR Business V2: frontend ==\n'
 npm ci
 npm run lint
@@ -46,7 +66,7 @@ python manage.py test platform_v2 --verbosity=2
 printf '\n== QR Business V2: optional legacy parity ==\n'
 if [[ "${ENABLE_LEGACY_IMPORT:-False}" == "True" ]]; then
   python manage.py migrate_legacy_v2
-  python manage.py legacy_parity_check
+  python manage.py check_legacy_parity
 else
   echo "Skipped. Set ENABLE_LEGACY_IMPORT=True only against the controlled migration database."
 fi
