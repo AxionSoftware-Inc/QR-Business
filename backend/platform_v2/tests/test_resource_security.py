@@ -130,3 +130,23 @@ class ResourceSecurityTests(TestCase):
             format="json",
         )
         self.assertEqual(blocked.status_code, 403)
+
+    def test_deactivate_create_reactivate_cannot_bypass_qr_limit(self):
+        self.tenant.plan = Tenant.Plan.FREE
+        self.tenant.save(update_fields=["plan", "updated_at"])
+        old = QRCode.objects.create(tenant=self.tenant, site=self.site, label="Old", is_active=False)
+        for index in range(5):
+            response = self.client.post(
+                "/api/v2/qr-codes/",
+                {"tenant": str(self.tenant.id), "site": str(self.site.id), "label": f"Active {index}"},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 201)
+        reactivated = self.client.patch(
+            f"/api/v2/qr-codes/{old.id}/",
+            {"is_active": True},
+            format="json",
+        )
+        self.assertEqual(reactivated.status_code, 403)
+        old.refresh_from_db()
+        self.assertFalse(old.is_active)
