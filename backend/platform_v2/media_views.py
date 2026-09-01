@@ -12,7 +12,7 @@ from rest_framework.response import Response
 
 from .access import can_write, user_tenant_ids
 from .entitlements import enforce_media_create
-from .models import MediaAsset, Tenant
+from .models import AuditLog, MediaAsset, Tenant
 from .serializers import MediaAssetSerializer
 
 
@@ -103,6 +103,20 @@ class MediaAssetViewSet(viewsets.ViewSet):
                 sha256=digest,
                 alt=str(request.data.get("alt") or "").strip()[:240],
             )
+            AuditLog.objects.create(
+                tenant=tenant,
+                actor=request.user,
+                action="media.created",
+                object_type="media_asset",
+                object_id=str(asset.id),
+                metadata={
+                    "content_type": content_type,
+                    "byte_size": len(raw),
+                    "width": width,
+                    "height": height,
+                    "sha256": digest,
+                },
+            )
         except Exception:
             default_storage.delete(saved_key)
             raise
@@ -115,6 +129,17 @@ class MediaAssetViewSet(viewsets.ViewSet):
         if not can_write(request.user, asset.tenant_id):
             return Response({"detail": "Editor, admin, or owner role required."}, status=status.HTTP_403_FORBIDDEN)
         storage_key = asset.storage_key
+        tenant = asset.tenant
+        asset_id = str(asset.id)
+        metadata = {"content_type": asset.content_type, "byte_size": asset.byte_size, "sha256": asset.sha256}
         asset.delete()
         default_storage.delete(storage_key)
+        AuditLog.objects.create(
+            tenant=tenant,
+            actor=request.user,
+            action="media.deleted",
+            object_type="media_asset",
+            object_id=asset_id,
+            metadata=metadata,
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
