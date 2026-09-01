@@ -166,10 +166,12 @@ export function buildGuestSite(draft: GuestDraft): PublishedSite {
   const hours = draft.hours.map((x) => ({ day: clean(x.day), value: clean(x.value) })).filter((x) => x.day || x.value);
   const hasContact = Boolean(clean(draft.phone) || clean(draft.telegram) || clean(draft.instagram) || clean(draft.whatsapp) || clean(draft.website));
   const hasAddress = Boolean(clean(draft.address));
+  const tenantSlug = normalizeSlug(draft.slug) || "guest-preview";
 
   return {
     id: "guest-preview-site",
     tenantId: "guest-preview-tenant",
+    tenantSlug,
     title: draft.businessName,
     description: draft.description,
     templateKey: draft.plan,
@@ -182,6 +184,7 @@ export function buildGuestSite(draft: GuestDraft): PublishedSite {
       surfaceColor: isPro ? "#fffaf2" : "#ffffff",
     },
     publishedAt: new Date().toISOString(),
+    showPlatformBranding: true,
     blocks: [
       { id: "guest_hero", type: "hero", enabled: true, data: { businessName: clean(draft.businessName) || "Yangi Biznes", category: clean(draft.category), description: clean(draft.description), coverUrl: optional(draft.coverUrl) } },
       { id: "guest_contacts", type: "contact_buttons", enabled: draft.enabled.contacts && hasContact, data: { phone: optional(draft.phone), telegram: optional(draft.telegram), instagram: optional(draft.instagram), whatsapp: optional(draft.whatsapp), website: optional(draft.website) } },
@@ -215,7 +218,7 @@ export function buildDraftFromSite(site: PublishedSite): GuestDraft {
     ...defaultGuestDraft,
     plan: site.templateKey,
     businessName: hero?.type === "hero" ? hero.data.businessName : site.title,
-    slug: site.tenantSlug ?? normalizeSlug(site.title),
+    slug: site.tenantSlug,
     category: hero?.type === "hero" ? hero.data.category : "",
     description: hero?.type === "hero" ? hero.data.description : site.description,
     phone: contacts?.type === "contact_buttons" ? contacts.data.phone ?? "" : "",
