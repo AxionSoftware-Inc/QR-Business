@@ -58,6 +58,8 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES":["rest_framework_simplejwt.authentication.JWTAuthentication","rest_framework.authentication.SessionAuthentication"],
     "DEFAULT_RENDERER_CLASSES":DEFAULT_RENDERER_CLASSES,
     "DEFAULT_PARSER_CLASSES":["rest_framework.parsers.JSONParser","rest_framework.parsers.MultiPartParser","rest_framework.parsers.FormParser"],
+    "DEFAULT_PAGINATION_CLASS":"platform_v2.pagination.V2PageNumberPagination",
+    "PAGE_SIZE":100,
     "DEFAULT_THROTTLE_CLASSES":["rest_framework.throttling.AnonRateThrottle","rest_framework.throttling.ScopedRateThrottle"],
     "DEFAULT_THROTTLE_RATES":{
         "anon":os.getenv("THROTTLE_ANON","600/hour"),
