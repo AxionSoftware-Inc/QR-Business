@@ -9,10 +9,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .access import can_admin, membership_for, user_tenant_ids
 from .entitlements import enforce_invitation_create, enforce_member_create
 from .models import AuditLog, Membership, TeamInvitation, Tenant
 from .serializers import MembershipSerializer, TeamInvitationSerializer
-from .views import can_admin, membership_for, user_tenant_ids
 
 
 def _hash_token(token: str) -> str:
