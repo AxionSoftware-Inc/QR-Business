@@ -33,6 +33,21 @@ if ! grep -q 'showPlatformBranding: boolean' src/modules/sites/types.ts; then
   exit 1
 fi
 
+if ! grep -q 'siteSlug: string' src/modules/sites/types.ts; then
+  echo "PublishedSite canonical site slug is missing." >&2
+  exit 1
+fi
+
+if ! grep -q 'siteSlug: site.slug' src/modules/api/v2-client.ts; then
+  echo "V2 public client does not normalize the canonical site slug." >&2
+  exit 1
+fi
+
+if ! grep -Fq '${baseUrl}/${site.tenantSlug}/${site.siteSlug}' src/modules/sites/public-site-renderer.tsx; then
+  echo "Public QR target is not the canonical tenant/site URL." >&2
+  exit 1
+fi
+
 if ! grep -q 'show_platform_branding = serializers.SerializerMethodField' backend/platform_v2/serializers.py; then
   echo "Public branding entitlement is missing from backend serializer." >&2
   exit 1
@@ -65,6 +80,7 @@ python manage.py test platform_v2 --verbosity=2
 
 printf '\n== QR Business V2: optional legacy migration rehearsal ==\n'
 if [[ "${ENABLE_LEGACY_IMPORT:-False}" == "True" ]]; then
+  python manage.py test platform_v2.tests.test_legacy_migration --verbosity=2
   python manage.py migrate_legacy_v2
   if [[ "${VERIFY_LEGACY_PARITY:-False}" == "True" ]]; then
     python manage.py check_legacy_parity
