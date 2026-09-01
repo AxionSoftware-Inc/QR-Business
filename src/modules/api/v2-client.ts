@@ -21,6 +21,7 @@ type V2PublicSite = {
   seo?: Record<string, unknown>;
   version: number;
   published_at: string | null;
+  show_platform_branding: boolean;
 };
 
 function normalizeTemplateKey(value: string): PublishedSite["templateKey"] {
@@ -53,6 +54,7 @@ function normalizePublicSite(site: V2PublicSite): PublishedSite {
     theme: isTheme(site.theme) ? site.theme : FALLBACK_THEME,
     blocks: Array.isArray(site.blocks) ? site.blocks : [],
     publishedAt: site.published_at ?? "",
+    showPlatformBranding: site.show_platform_branding !== false,
   };
 }
 
