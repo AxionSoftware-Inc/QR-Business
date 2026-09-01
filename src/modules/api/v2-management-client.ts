@@ -10,6 +10,7 @@ export type V2QRCode = { id:string; tenant:string; site:string; code:string; lab
 export type V2MediaAsset = { id:string; tenant:string; kind:"image"; url:string; original_name:string; content_type:"image/jpeg"|"image/png"|"image/webp"; byte_size:number; width:number; height:number; sha256:string; alt:string; created_at:string };
 export type V2Analytics = { totals:Array<{event_type:"view"|"qr_scan"|"cta_click";count:number}>; top_targets:Array<{target:string;count:number}>; daily?:Array<{day:string;event_type:string;count:number}> };
 export type V2TenantAnalytics = { totals:V2Analytics["totals"]; sites:Record<string,V2Analytics>; daily?:V2Analytics["daily"] };
+export type V2AdminOverview={tenants:number;sites:{total:number;published:number;draft:number;disabled:number};qr_codes:number;active_qr_codes:number;custom_domains:number;verified_domains:number};
 export type V2DraftPayload = { title:string; description?:string; template_key?:string; theme?:Record<string,unknown>; blocks?:unknown[]; seo?:Record<string,unknown> };
 export type V2Entitlements = {
   plan:V2Tenant["plan"];
@@ -30,6 +31,7 @@ export function createV2Tenant(input:{name:string;slug:string;locale?:string;tim
 export function updateV2Tenant(tenantId:string,input:Partial<Pick<V2Tenant,"name"|"slug"|"locale"|"timezone">>){return json<V2Tenant>(`/api/v2/tenants/${tenantId}/`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(input)});}
 export const getV2Entitlements=(tenantId:string)=>json<V2Entitlements>(`/api/v2/tenants/${tenantId}/entitlements/`);
 export const getV2TenantAnalytics=(tenantId:string)=>json<V2TenantAnalytics>(`/api/v2/tenants/${tenantId}/analytics/`);
+export const getV2AdminOverview=()=>json<V2AdminOverview>("/api/v2/admin/overview/");
 export const listV2Members=(tenantId:string)=>json<V2MembershipRow[]>(`/api/v2/tenants/${tenantId}/members/`);
 export const listV2TeamInvitations=(tenantId:string)=>json<V2TeamInvitation[]>(`/api/v2/tenants/${tenantId}/team/invitations/`);
 export function createV2TeamInvitation(tenantId:string,input:{email:string;role:"admin"|"editor"|"analyst"}){return json<V2TeamInvitation>(`/api/v2/tenants/${tenantId}/team/invitations/`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(input)});}
