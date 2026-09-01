@@ -173,6 +173,7 @@ export type PublishedSite = {
   id: string;
   tenantId: string;
   tenantSlug: string;
+  siteSlug: string;
   title: string;
   description: string;
   templateKey: "oddiy" | "plus" | "pro";
