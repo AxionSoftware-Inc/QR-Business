@@ -51,6 +51,22 @@ class EntitlementTests(TestCase):
         self.assertEqual(response.json()["usage"]["sites"], 1)
         self.assertEqual(response.json()["usage"]["members"], 1)
 
+    def test_public_payload_exposes_server_authoritative_branding_policy(self):
+        site = Site.objects.create(tenant=self.tenant, slug="main", name="Main", status=Site.Status.PUBLISHED)
+        version = SiteVersion.objects.create(site=site, version=1, title="Main", blocks=[])
+        site.published_version = version
+        site.save(update_fields=["published_version"])
+
+        free = APIClient().get("/api/v2/public/sites/free-workspace/main/")
+        self.assertEqual(free.status_code, 200)
+        self.assertTrue(free.json()["show_platform_branding"])
+
+        self.tenant.plan = Tenant.Plan.PRO
+        self.tenant.save(update_fields=["plan", "updated_at"])
+        pro = APIClient().get("/api/v2/public/sites/free-workspace/main/")
+        self.assertEqual(pro.status_code, 200)
+        self.assertFalse(pro.json()["show_platform_branding"])
+
 
 class TeamSecurityTests(TestCase):
     def setUp(self):
@@ -80,6 +96,16 @@ class TeamSecurityTests(TestCase):
         listed = self.client(self.owner).get(f"/api/v2/tenants/{self.tenant.id}/team/invitations/")
         self.assertEqual(listed.status_code, 200)
         self.assertNotIn("token", listed.json()[0])
+
+    def test_pending_invitations_reserve_plan_seats(self):
+        self.tenant.plan = Tenant.Plan.PRO
+        self.tenant.save(update_fields=["plan", "updated_at"])
+        first = self.client(self.owner).post(f"/api/v2/tenants/{self.tenant.id}/team/invitations/", {"email": "one@example.com", "role": "editor"}, format="json")
+        second = self.client(self.owner).post(f"/api/v2/tenants/{self.tenant.id}/team/invitations/", {"email": "two@example.com", "role": "analyst"}, format="json")
+        blocked = self.client(self.owner).post(f"/api/v2/tenants/{self.tenant.id}/team/invitations/", {"email": "three@example.com", "role": "editor"}, format="json")
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 201)
+        self.assertEqual(blocked.status_code, 403)
 
     def test_owner_cannot_be_removed_without_transfer(self):
         owner_membership = Membership.objects.get(tenant=self.tenant, user=self.owner)
