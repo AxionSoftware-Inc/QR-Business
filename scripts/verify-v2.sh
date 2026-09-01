@@ -41,6 +41,10 @@ if ! grep -q 'DEFAULT_PAGINATION_CLASS' backend/config/settings.py; then echo "B
 if ! grep -q 'url_path="analytics"' backend/platform_v2/views.py; then echo "Tenant batch analytics endpoint is missing." >&2; exit 1; fi
 if ! grep -q 'getV2TenantAnalytics' src/app/guest/dashboard/guest-dashboard-client.tsx; then echo "Dashboard regressed to per-site analytics requests." >&2; exit 1; fi
 if ! grep -q 'PlatformAdminOverviewView' backend/platform_v2/urls.py; then echo "Scalable platform admin overview endpoint is missing." >&2; exit 1; fi
+if [[ ! -f backend/platform_v2/access.py ]]; then echo "Central tenant access policy is missing." >&2; exit 1; fi
+if grep -R --line-number --exclude='views.py' -E 'from \.views import (can_admin|can_write|membership_for|user_tenant_ids)' backend/platform_v2; then echo "Backend access policy leaked back into views.py imports." >&2; exit 1; fi
+if [[ ! -f src/app/error.tsx || ! -f src/app/not-found.tsx ]]; then echo "Frontend error/not-found boundaries are missing." >&2; exit 1; fi
+if [[ ! -f src/modules/i18n/catalog.ts ]]; then echo "UI localization catalog is missing." >&2; exit 1; fi
 
 printf '\n== QR Business V2: frontend ==\n'
 npm ci
