@@ -52,6 +52,8 @@ class PublicPlanCatalogView(APIView):
                         "sites": entitlement.max_sites,
                         "members": entitlement.max_members,
                         "media_assets": entitlement.max_media_assets,
+                        "qr_codes": entitlement.max_qr_codes,
+                        "custom_domains": entitlement.max_custom_domains,
                     },
                     "features": {
                         "custom_domains": entitlement.custom_domains,
