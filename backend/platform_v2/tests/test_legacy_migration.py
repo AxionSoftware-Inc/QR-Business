@@ -82,6 +82,44 @@ class LegacyMigrationTests(TestCase):
 
         call_command("check_legacy_parity", stdout=StringIO(), stderr=StringIO())
 
+    def test_clean_rerun_preserves_new_v2_domain_verification(self):
+        self.create_legacy_fixture()
+        call_command("migrate_legacy_v2", apply=True, stdout=StringIO())
+
+        domain = Domain.objects.get(hostname="legacy.example.com")
+        domain.status = Domain.Status.VERIFIED
+        domain.verified_at = timezone.now()
+        verified_at = domain.verified_at
+        domain.save(update_fields=["status", "verified_at", "updated_at"])
+
+        call_command("migrate_legacy_v2", apply=True, stdout=StringIO())
+
+        domain.refresh_from_db()
+        self.assertEqual(domain.status, Domain.Status.VERIFIED)
+        self.assertEqual(domain.verified_at, verified_at)
+        call_command("check_legacy_parity", stdout=StringIO(), stderr=StringIO())
+
+    def test_rerun_refuses_to_repoint_site_after_native_v2_version_exists(self):
+        self.create_legacy_fixture()
+        call_command("migrate_legacy_v2", apply=True, stdout=StringIO())
+
+        site = Site.objects.get(tenant__slug="legacy-shop", slug="main")
+        native = SiteVersion.objects.create(
+            site=site,
+            version=2,
+            title="Native V2 draft",
+            blocks=[],
+            seo={},
+        )
+        site.draft_version = native
+        site.save(update_fields=["draft_version", "updated_at"])
+
+        with self.assertRaises(CommandError):
+            call_command("migrate_legacy_v2", apply=True, stdout=StringIO())
+
+        site.refresh_from_db()
+        self.assertEqual(site.draft_version_id, native.id)
+
     def test_import_refuses_to_overwrite_existing_v2_content(self):
         self.create_legacy_fixture(slug="collision")
         tenant = Tenant.objects.create(
