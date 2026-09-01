@@ -63,10 +63,16 @@ python manage.py makemigrations --check --dry-run
 python manage.py migrate --noinput
 python manage.py test platform_v2 --verbosity=2
 
-printf '\n== QR Business V2: optional legacy parity ==\n'
+printf '\n== QR Business V2: optional legacy migration rehearsal ==\n'
 if [[ "${ENABLE_LEGACY_IMPORT:-False}" == "True" ]]; then
   python manage.py migrate_legacy_v2
-  python manage.py check_legacy_parity
+  if [[ "${VERIFY_LEGACY_PARITY:-False}" == "True" ]]; then
+    python manage.py check_legacy_parity
+  else
+    echo "Dry-run completed. Parity is intentionally skipped until an applied migration exists."
+    echo "After: python manage.py migrate_legacy_v2 --apply"
+    echo "Run:   VERIFY_LEGACY_PARITY=True ./scripts/verify-v2.sh"
+  fi
 else
   echo "Skipped. Set ENABLE_LEGACY_IMPORT=True only against the controlled migration database."
 fi
