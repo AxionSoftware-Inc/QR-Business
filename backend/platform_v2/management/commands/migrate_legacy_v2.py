@@ -103,14 +103,24 @@ class Command(BaseCommand):
                     else:
                         counters["sites_existing"] += 1
 
-                    imported_version = None
-                    for candidate in SiteVersion.objects.filter(site=site).order_by("version"):
-                        if is_same_import(candidate, legacy_site):
-                            imported_version = candidate
-                            break
+                    versions = list(SiteVersion.objects.filter(site=site).order_by("version"))
+                    imported_version = next(
+                        (candidate for candidate in versions if is_same_import(candidate, legacy_site)),
+                        None,
+                    )
+                    non_import_versions = [
+                        candidate for candidate in versions if not is_same_import(candidate, legacy_site)
+                    ]
 
-                    if imported_version is None:
-                        if SiteVersion.objects.filter(site=site).exists():
+                    if imported_version is not None and non_import_versions:
+                        raise CommandError(
+                            f"Post-import V2 content exists for tenant={tenant.slug} site=main. "
+                            "The importer will not move draft/published pointers back to legacy content."
+                        )
+
+                    first_import = imported_version is None
+                    if first_import:
+                        if versions:
                             raise CommandError(
                                 f"Migration collision for tenant={tenant.slug} site=main: "
                                 "the V2 site already has non-legacy versions. Resolve manually; "
@@ -129,8 +139,8 @@ class Command(BaseCommand):
                         )
                         counters["versions_created"] += 1
                     else:
-                        # Idempotent reruns may reuse the exact imported snapshot, but never
-                        # mutate it. The first successful import is the immutable migration input.
+                        # A clean rerun may reuse the exact imported snapshot. It is only
+                        # considered clean when no later native V2 version exists.
                         counters["versions_reused"] += 1
 
                     site.draft_version = imported_version
@@ -175,11 +185,10 @@ class Command(BaseCommand):
                             else Domain.Kind.SUBDOMAIN
                         )
                         if kind == Domain.Kind.CUSTOM:
-                            # Legacy verification did not use the V2 TXT proof. Never carry
-                            # the trust bit across the security boundary; require re-verification.
+                            # Legacy verification did not use the V2 TXT proof. On first
+                            # import the trust bit never crosses the security boundary.
                             domain_status = Domain.Status.PENDING
                             verified_at = None
-                            counters["custom_domains_reverify"] += 1
                         else:
                             domain_status = (
                                 Domain.Status.VERIFIED
@@ -198,21 +207,25 @@ class Command(BaseCommand):
                                 verified_at=verified_at,
                             )
                             counters["domains_created"] += 1
+                            if kind == Domain.Kind.CUSTOM:
+                                counters["custom_domains_reverify"] += 1
                         else:
-                            # Same-tenant pre-existing domains are preserved unless they are
-                            # custom domains, which must still be forced back to pending proof.
                             if existing_domain.site_id not in {None, site.id}:
                                 raise CommandError(
                                     f"Domain collision for {hostname}: mapped to a different V2 site."
                                 )
-                            if kind == Domain.Kind.CUSTOM:
-                                existing_domain.site = site
-                                existing_domain.kind = kind
-                                existing_domain.status = Domain.Status.PENDING
-                                existing_domain.verified_at = None
-                                existing_domain.save(
-                                    update_fields=["site", "kind", "status", "verified_at", "updated_at"]
+                            if existing_domain.kind != kind:
+                                raise CommandError(
+                                    f"Domain collision for {hostname}: V2 kind does not match legacy kind."
                                 )
+                            if first_import:
+                                # A same-host domain that existed before the imported snapshot
+                                # has no migration provenance. Do not mutate or reassign it.
+                                raise CommandError(
+                                    f"Domain collision for {hostname}: a V2 domain existed before this legacy import."
+                                )
+                            # Clean reruns preserve V2 domain state. In particular, a custom
+                            # domain that has since passed the new TXT proof must remain verified.
                             counters["domains_existing"] += 1
 
                 self.stdout.write(self.style.SUCCESS(self._report(counters, apply_changes)))
