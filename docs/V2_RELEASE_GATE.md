@@ -1,6 +1,6 @@
 # QR Business V2 Release Gate
 
-`rebuild/global-v2` must not be merged/deployed as production merely because code review looks good. The release is accepted only after every required gate below is completed on a real environment.
+`rebuild/global-v2` must not be merged or deployed merely because code review looks good. The release is accepted only after every gate that applies to the intended launch scope has passed on a real environment.
 
 ## Gate A — source architecture
 
@@ -15,12 +15,15 @@ Required:
 - no `src/backend.ts`;
 - no legacy frontend backend client;
 - no owner-token/recovery ownership path;
-- no legacy Django `/api/` route;
+- no dead client-side QR panel/component;
+- no legacy Django `/api/` runtime route;
+- public `PublishedSite` carries tenant slug, site slug and branding policy;
+- legacy one-slug aliases permanently redirect to canonical `/{tenant}/{site}`;
 - frontend lint passes;
 - frontend production build passes;
 - Django compile/check/deployment checks pass;
 - no uncommitted migration drift;
-- `platform_v2` tests pass.
+- complete `platform_v2` tests pass.
 
 ## Gate B — database migration rehearsal
 
@@ -30,6 +33,7 @@ Use a recent copy of the real production database, never the live database for t
 cd backend
 export ENABLE_LEGACY_IMPORT=True
 python manage.py migrate
+python manage.py test platform_v2.tests.test_legacy_migration --verbosity=2
 python manage.py migrate_legacy_v2
 ```
 
@@ -42,11 +46,17 @@ python manage.py check_legacy_parity
 
 Acceptance:
 
-- parity command exits zero;
+- default migration mode performs no persistent V2 writes;
+- applied migration is idempotent before native V2 edits exist;
 - every migratable legacy tenant exists in V2;
-- every legacy site has a V2 snapshot;
+- every legacy site has the exact `main` V2 import snapshot with migration provenance;
 - published/draft/disabled state is preserved;
-- valid legacy domains are represented;
+- imported snapshot content matches legacy title, description, template, theme and blocks;
+- path-like legacy hostname artifacts are skipped;
+- legacy custom-domain trust is not inherited: custom domains require V2 TXT re-verification;
+- an already V2-verified custom domain is not downgraded by a harmless importer rerun;
+- cross-tenant domain collisions fail closed;
+- native V2 site versions created after migration cause a later importer rerun to fail rather than moving live pointers back to legacy content;
 - no legacy `owner_contact` is silently converted into authenticated ownership.
 
 ## Gate C — authentication and authorization
@@ -55,14 +65,18 @@ Smoke-test with at least two real Google accounts and two tenants.
 
 Acceptance:
 
+- Google credential is verified server-side;
 - login works;
-- refresh works;
+- refresh works and rotates the opaque server session;
+- replay of a rotated session token fails;
 - logout invalidates/revokes the server session;
 - Tenant A user cannot list/read/write Tenant B resources;
 - editor cannot perform owner-only operations;
 - analyst cannot mutate site data;
-- team invite can only be accepted by the invited email;
+- team invite can only be accepted by the invited verified email;
 - invitation token is visible only at creation time;
+- pending invitations reserve plan seats;
+- the invited user can consume their own reserved seat;
 - last owner cannot be deleted/demoted;
 - ownership transfer makes the target owner and demotes the previous owner safely.
 
@@ -78,8 +92,9 @@ Acceptance:
 - save draft;
 - reload builder and recover draft from server;
 - publish;
-- public page uses published snapshot;
-- editing a later draft does not alter the existing live snapshot before another publish.
+- public page uses the immutable published snapshot;
+- editing a later draft does not alter the existing live snapshot before another publish;
+- multi-site tenant keeps independent slugs and public routes.
 
 Test Free, Starter, Pro and Business limits separately.
 
@@ -88,9 +103,14 @@ Test Free, Starter, Pro and Business limits separately.
 Acceptance:
 
 - QR resource is created for a site;
+- plan QR quota is server-enforced;
+- deactivating QR codes cannot be used to exceed the total plan quota and later reactivate them;
+- QR tenant cannot be changed;
+- QR cannot target a site from another tenant;
 - PNG download opens/scans;
 - SVG download opens/scans;
-- `/q/<code>/` records a scan and redirects to the current site URL;
+- `/q/<code>/` records a scan and redirects to the current canonical `/{tenant}/{site}` URL;
+- a site-rendered QR encodes the exact tenant+site canonical URL, not the tenant default route;
 - disabling or invalid QR returns an appropriate not-found response;
 - changing/publishing site content does not require reprinting the dynamic QR.
 
@@ -98,12 +118,13 @@ Acceptance:
 
 Acceptance:
 
-- public view increments view analytics;
+- public view increments view analytics once;
 - CTA click records expected target;
 - QR redirect records `qr_scan`;
 - tenant isolation applies to dashboard analytics;
-- Free plan does not accidentally expose paid advanced analytics;
-- Pro/Business advanced analytics response is available.
+- raw visitor IP is not persisted by V2 analytics;
+- Free plan does not expose paid advanced analytics;
+- paid advanced analytics response is available only where entitled.
 
 ## Gate G — custom domain and TLS
 
@@ -112,10 +133,18 @@ Use a real test domain.
 Acceptance:
 
 - owner/admin can create custom domain only on an entitled plan;
+- custom-domain quota is server-enforced;
+- URL/path/port/IP input is rejected as hostname input;
+- IDNA hostname input is normalized correctly;
+- the platform-owned domain/subdomains cannot be claimed as customer custom domains;
+- a Domain cannot be moved to another tenant;
+- a Domain cannot be retargeted to a foreign-tenant site;
+- changing a verified hostname resets verification and rotates the verification token;
 - DNS TXT instructions are correct;
 - domain remains pending before proof exists;
 - verification succeeds after DNS propagation;
 - host resolver rejects unverified domains;
+- plan downgrade makes an otherwise verified custom domain unroutable when the plan no longer entitles it;
 - TLS approval rejects arbitrary/pending domains;
 - Caddy obtains a certificate only after approval;
 - HTTPS custom domain renders the intended published site;
@@ -130,15 +159,19 @@ Against the production-compatible object store:
 - WebP upload succeeds;
 - SVG/executable/invalid bytes are rejected;
 - oversized bytes/dimensions are rejected;
+- plan media quota is enforced;
 - duplicate content behaves as intended;
 - public media URL remains stable after publish;
 - cross-tenant access is impossible;
 - authorized deletion removes the object and DB record.
 
-## Gate I — billing adapter
+## Gate I — billing and entitlements
 
 Before accepting real money:
 
+- public pricing catalog and authenticated entitlement payload expose the same server-authoritative limits;
+- Free/Starter/Pro/Business site, member, media, dynamic-QR and custom-domain quotas match product policy;
+- remove-branding is enforced by the public serializer/renderer rather than trusted from the browser;
 - provider-specific adapter has its own tests;
 - provider event is normalized into the internal billing webhook contract;
 - invalid signature cannot mutate plan;
@@ -193,7 +226,7 @@ With `DJANGO_DEBUG=False`:
 - S3 credentials server-only;
 - Google client ID restricted correctly;
 - CSP matches actual frontend/API/media providers;
-- legacy import disabled.
+- legacy import disabled during normal runtime.
 
 ## Gate M — cutover
 
@@ -202,15 +235,16 @@ Immediately before cutover:
 1. freeze legacy writes or define the final migration window;
 2. create verified backup;
 3. run final legacy migration apply;
-4. run parity check;
+4. run exact parity check;
 5. deploy V2 backend;
 6. wait for readiness 200;
 7. deploy V2 frontend/edge;
-8. smoke-test login → builder → publish → public page → QR → analytics → domain;
-9. monitor errors/latency.
+8. smoke-test login → builder → publish → canonical public page → dynamic QR → analytics → custom domain;
+9. verify old one-slug URLs 308/redirect to canonical two-segment URLs;
+10. monitor errors/latency.
 
 Only after parity is confirmed on the real production migration may `backend/core` be physically removed in a separate cleanup commit.
 
 ## Merge rule
 
-Do not merge `rebuild/global-v2` to `main` until Gates A–M that apply to the intended launch scope are marked complete. A missing external dependency (payment provider, object store, real DNS domain, production DB) is a blocked gate, not a pass.
+Do not merge `rebuild/global-v2` to `main` until Gates A–M that apply to the intended launch scope are complete. A missing external dependency such as payment provider, object store, real DNS domain, production database copy, or executable build environment is a **blocked gate**, not a pass.
