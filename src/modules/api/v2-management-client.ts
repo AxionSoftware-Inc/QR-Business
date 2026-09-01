@@ -10,7 +10,12 @@ export type V2QRCode = { id:string; tenant:string; site:string; code:string; lab
 export type V2MediaAsset = { id:string; tenant:string; kind:"image"; url:string; original_name:string; content_type:"image/jpeg"|"image/png"|"image/webp"; byte_size:number; width:number; height:number; sha256:string; alt:string; created_at:string };
 export type V2Analytics = { totals:Array<{event_type:"view"|"qr_scan"|"cta_click";count:number}>; top_targets:Array<{target:string;count:number}>; daily?:Array<{day:string;event_type:string;count:number}> };
 export type V2DraftPayload = { title:string; description?:string; template_key?:string; theme?:Record<string,unknown>; blocks?:unknown[]; seo?:Record<string,unknown> };
-export type V2Entitlements = { plan:V2Tenant["plan"]; limits:{sites:number;members:number;media_assets:number}; features:{custom_domains:boolean;advanced_analytics:boolean;remove_branding:boolean}; usage:{sites:number;members:number;media_assets:number;custom_domains:number} };
+export type V2Entitlements = {
+  plan:V2Tenant["plan"];
+  limits:{sites:number;members:number;media_assets:number;qr_codes:number;custom_domains:number};
+  features:{custom_domains:boolean;advanced_analytics:boolean;remove_branding:boolean};
+  usage:{sites:number;members:number;pending_invitations:number;reserved_member_seats:number;media_assets:number;qr_codes:number;custom_domains:number};
+};
 export type V2MembershipRow = { id:string; user:number; email:string; name:string; role:"owner"|"admin"|"editor"|"analyst"; is_active:boolean; created_at:string; updated_at:string };
 export type V2TeamInvitation = { id:string; tenant:string; email:string; role:"admin"|"editor"|"analyst"; status:"pending"|"accepted"|"revoked"|"expired"; expires_at:string; invited_by:number|null; accepted_by:number|null; accepted_at:string|null; created_at:string; token?:string };
 
