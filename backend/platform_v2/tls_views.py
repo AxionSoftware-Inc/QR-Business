@@ -2,15 +2,16 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .entitlements import for_tenant
 from .models import Domain, Site, Tenant
 
 
 class TLSApprovalView(APIView):
     """Caddy on-demand TLS ask endpoint.
 
-    Returns 2xx only when the requested custom domain is already verified and
-    resolves to an active tenant with a published site. The endpoint carries no
-    secrets and never mutates state.
+    Returns 2xx only when the requested custom domain is verified, its tenant
+    still has custom-domain entitlement, and the domain resolves to a published
+    site. The endpoint carries no secrets and never mutates state.
     """
 
     permission_classes = [AllowAny]
@@ -27,10 +28,14 @@ class TLSApprovalView(APIView):
             status=Domain.Status.VERIFIED,
             tenant__status__in=[Tenant.Status.TRIAL, Tenant.Status.ACTIVE],
         ).first()
-        if not domain:
+        if not domain or not for_tenant(domain.tenant).custom_domains:
             return Response({"allowed": False}, status=404)
         if domain.site_id:
             valid = domain.site.status == Site.Status.PUBLISHED and bool(domain.site.published_version_id)
         else:
-            valid = Site.objects.filter(tenant=domain.tenant,status=Site.Status.PUBLISHED,published_version__isnull=False).exists()
+            valid = Site.objects.filter(
+                tenant=domain.tenant,
+                status=Site.Status.PUBLISHED,
+                published_version__isnull=False,
+            ).exists()
         return Response({"allowed": True, "domain": hostname}) if valid else Response({"allowed": False}, status=404)
