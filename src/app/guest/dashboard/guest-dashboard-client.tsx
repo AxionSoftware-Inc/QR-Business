@@ -10,7 +10,7 @@ import {
   getV2DomainVerification,
   getV2TenantAnalytics,
   listV2Domains,
-  listV2QRCodes,
+  listV2PrimaryQRCodes,
   listV2Sites,
   verifyV2Domain,
   type V2Analytics,
@@ -47,7 +47,7 @@ export function GuestDashboardClient() {
       const [nextSites, nextDomains, nextQrCodes, nextAnalytics] = await Promise.all([
         listV2Sites(tenantId),
         listV2Domains(tenantId),
-        listV2QRCodes(tenantId),
+        listV2PrimaryQRCodes(tenantId),
         getV2TenantAnalytics(tenantId),
       ]);
       setSites(nextSites);
