@@ -169,16 +169,11 @@ export type SiteBlock =
   | ProcessBlock
   | FaqBlock;
 
-/**
- * Renderable site snapshot. Real V2 public API responses always provide
- * tenantSlug, siteSlug and showPlatformBranding. Local Studio previews may
- * omit route/entitlement metadata and use renderer-safe defaults.
- */
 export type PublishedSite = {
   id: string;
   tenantId: string;
-  tenantSlug?: string;
-  siteSlug?: string;
+  tenantSlug: string;
+  siteSlug: string;
   title: string;
   description: string;
   templateKey: "oddiy" | "plus" | "pro";
@@ -186,5 +181,5 @@ export type PublishedSite = {
   theme: SiteTheme;
   blocks: SiteBlock[];
   publishedAt: string;
-  showPlatformBranding?: boolean;
+  showPlatformBranding: boolean;
 };
