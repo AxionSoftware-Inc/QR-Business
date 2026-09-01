@@ -168,11 +168,11 @@ function PublicQrPanel({
 }) {
   const baseUrl =
     process.env.NEXT_PUBLIC_SITE_BASE_URL ?? "http://127.0.0.1:3000";
-  const publicUrl = `${baseUrl}/${site.tenantSlug}`;
+  const publicUrl = `${baseUrl}/${site.tenantSlug}/${site.siteSlug}`;
   const qrUrl = `/api/qr?url=${encodeURIComponent(publicUrl)}`;
   const qrSvgUrl = `${qrUrl}&format=svg`;
   const qrPdfUrl = `/api/qr-sheet?url=${encodeURIComponent(publicUrl)}&title=${encodeURIComponent(site.title)}`;
-  const fileName = `${site.tenantSlug.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "qr-site"}.png`;
+  const fileName = `${`${site.tenantSlug}-${site.siteSlug}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "qr-site"}.png`;
   const svgFileName = fileName.replace(/\.png$/, ".svg");
 
   if (variant === "pro") {
