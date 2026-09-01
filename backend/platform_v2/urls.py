@@ -12,6 +12,7 @@ from .public_routing_views import PublicHostResolverView
 from .team_views import OwnershipTransferView, TeamInvitationAcceptView, TeamInvitationListCreateView, TeamInvitationRevokeView, TeamMemberDetailView
 from .tls_views import TLSApprovalView
 from .views import DomainViewSet, HealthView, PublicEventView, PublicSiteBySlugView, QRCodeViewSet, QRRedirectView, SiteViewSet, TenantViewSet
+from .workspace_views import WorkspacePrimaryQRCodesView
 
 router = DefaultRouter()
 router.register("tenants", TenantViewSet, basename="v2-tenant")
@@ -35,6 +36,7 @@ urlpatterns = [
     path("team/invitations/<uuid:invitation_id>/revoke/", TeamInvitationRevokeView.as_view(), name="v2-team-invite-revoke"),
     path("team/members/<uuid:membership_id>/", TeamMemberDetailView.as_view(), name="v2-team-member"),
     path("tenants/<uuid:tenant_id>/team/transfer-ownership/", OwnershipTransferView.as_view(), name="v2-team-transfer-ownership"),
+    path("tenants/<uuid:tenant_id>/workspace/primary-qr-codes/", WorkspacePrimaryQRCodesView.as_view(), name="v2-workspace-primary-qrs"),
     path("public/resolve-host/", PublicHostResolverView.as_view(), name="v2-public-resolve-host"),
     path("public/tls-allow/", TLSApprovalView.as_view(), name="v2-public-tls-allow"),
     path("public/sites/<slug:tenant_slug>/", PublicDefaultSiteView.as_view(), name="v2-public-default-site"),
