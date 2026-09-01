@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .entitlements import enforce_member_create
+from .entitlements import enforce_invitation_create, enforce_member_create
 from .models import AuditLog, Membership, TeamInvitation, Tenant
 from .serializers import MembershipSerializer, TeamInvitationSerializer
 from .views import can_admin, membership_for, user_tenant_ids
@@ -40,7 +40,6 @@ class TeamInvitationListCreateView(APIView):
         tenant = Tenant.objects.select_for_update().filter(id=tenant_id, id__in=user_tenant_ids(request.user)).first()
         if not tenant or not can_admin(request.user, tenant.id):
             return Response({"detail": "Owner or admin role required."}, status=403)
-        enforce_member_create(tenant)
         email = str(request.data.get("email") or "").strip().lower()
         role = str(request.data.get("role") or Membership.Role.EDITOR)
         if not email or "@" not in email:
@@ -50,6 +49,7 @@ class TeamInvitationListCreateView(APIView):
         if tenant.memberships.filter(user__email__iexact=email, is_active=True).exists():
             return Response({"detail": "This user is already a team member."}, status=409)
         tenant.team_invitations.filter(email__iexact=email, status=TeamInvitation.Status.PENDING).update(status=TeamInvitation.Status.REVOKED)
+        enforce_invitation_create(tenant)
         raw_token = secrets.token_urlsafe(48)
         invitation = TeamInvitation.objects.create(tenant=tenant, invited_by=request.user, email=email, role=role, token_hash=_hash_token(raw_token), expires_at=timezone.now() + timedelta(days=7))
         AuditLog.objects.create(tenant=tenant, actor=request.user, action="team.invite", object_type="team_invitation", object_id=str(invitation.id), metadata={"email": email, "role": role})
