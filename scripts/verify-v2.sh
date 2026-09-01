@@ -10,9 +10,11 @@ for forbidden in \
   "src/backend.ts" \
   "src/modules/api/backend-client.ts" \
   "src/modules/guest/guest-session.ts" \
-  "src/modules/tenants/tenant-repository.ts"; do
+  "src/modules/tenants/tenant-repository.ts" \
+  "src/shared/ui/site-qr-panel.tsx" \
+  "src/shared/ui/qr-code.tsx"; do
   if [[ -e "$forbidden" ]]; then
-    echo "Forbidden legacy runtime file exists: $forbidden" >&2
+    echo "Forbidden legacy/dead runtime file exists: $forbidden" >&2
     exit 1
   fi
 done
@@ -48,6 +50,11 @@ if ! grep -Fq '${baseUrl}/${site.tenantSlug}/${site.siteSlug}' src/modules/sites
   exit 1
 fi
 
+if ! grep -q 'permanentRedirect' 'src/app/site/[slug]/page.tsx'; then
+  echo "Legacy one-slug public alias is not permanently redirected to canonical V2 routing." >&2
+  exit 1
+fi
+
 if ! grep -q 'show_platform_branding = serializers.SerializerMethodField' backend/platform_v2/serializers.py; then
   echo "Public branding entitlement is missing from backend serializer." >&2
   exit 1
@@ -60,6 +67,16 @@ fi
 
 if ! grep -q 'showPlatformBranding: true' src/modules/guest/guest-site-factory.ts; then
   echo "Builder preview is not aligned with PublishedSite branding contract." >&2
+  exit 1
+fi
+
+if ! grep -q 'enforce_qr_create' backend/platform_v2/serializers.py; then
+  echo "Dynamic QR plan enforcement is missing." >&2
+  exit 1
+fi
+
+if ! grep -q 'normalize_custom_hostname' backend/platform_v2/serializers.py; then
+  echo "Custom-domain normalization/validation is missing." >&2
   exit 1
 fi
 
