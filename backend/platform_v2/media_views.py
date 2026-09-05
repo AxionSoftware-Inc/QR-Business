@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from .access import can_write, user_tenant_ids
 from .entitlements import enforce_media_create
 from .models import AuditLog, MediaAsset, Tenant
+from .pagination import V2PageNumberPagination
 from .serializers import MediaAssetSerializer
 
 
@@ -29,16 +30,19 @@ ALLOWED_IMAGE_TYPES = {
 class MediaAssetViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
     throttle_scope = "upload_media"
+    pagination_class = V2PageNumberPagination
 
     def _queryset(self, request):
-        return MediaAsset.objects.filter(tenant_id__in=user_tenant_ids(request.user)).select_related("tenant")
+        return MediaAsset.objects.filter(tenant_id__in=user_tenant_ids(request.user)).select_related("tenant").order_by("-created_at", "id")
 
     def list(self, request):
         tenant_id = request.query_params.get("tenant")
         rows = self._queryset(request)
         if tenant_id:
             rows = rows.filter(tenant_id=tenant_id)
-        return Response(MediaAssetSerializer(rows[:200], many=True).data)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(rows, request, view=self)
+        return paginator.get_paginated_response(MediaAssetSerializer(page, many=True).data)
 
     def retrieve(self, request, pk=None):
         asset = self._queryset(request).filter(pk=pk).first()
@@ -109,13 +113,7 @@ class MediaAssetViewSet(viewsets.ViewSet):
                 action="media.created",
                 object_type="media_asset",
                 object_id=str(asset.id),
-                metadata={
-                    "content_type": content_type,
-                    "byte_size": len(raw),
-                    "width": width,
-                    "height": height,
-                    "sha256": digest,
-                },
+                metadata={"content_type": content_type, "byte_size": len(raw), "width": width, "height": height, "sha256": digest},
             )
         except Exception:
             default_storage.delete(saved_key)
@@ -134,12 +132,5 @@ class MediaAssetViewSet(viewsets.ViewSet):
         metadata = {"content_type": asset.content_type, "byte_size": asset.byte_size, "sha256": asset.sha256}
         asset.delete()
         default_storage.delete(storage_key)
-        AuditLog.objects.create(
-            tenant=tenant,
-            actor=request.user,
-            action="media.deleted",
-            object_type="media_asset",
-            object_id=asset_id,
-            metadata=metadata,
-        )
+        AuditLog.objects.create(tenant=tenant, actor=request.user, action="media.deleted", object_type="media_asset", object_id=asset_id, metadata=metadata)
         return Response(status=status.HTTP_204_NO_CONTENT)
