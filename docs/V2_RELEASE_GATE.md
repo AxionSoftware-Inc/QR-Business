@@ -12,13 +12,18 @@ Run:
 
 Required:
 
-- no `src/backend.ts`;
-- no legacy frontend backend client;
-- no owner-token/recovery ownership path;
+- no legacy frontend in-memory/backend client or owner-token runtime;
 - no dead client-side QR panel/component;
 - no legacy Django `/api/` runtime route;
 - public `PublishedSite` carries tenant slug, site slug and branding policy;
 - legacy one-slug aliases permanently redirect to canonical `/{tenant}/{site}`;
+- central backend access policy has no duplicate helper implementation in `views.py`;
+- bounded pagination exists for normal resources and media;
+- dashboard analytics is tenant-batched rather than per-site N+1;
+- staff site browser and forensic audit viewer are bounded/paginated;
+- workspace UI uses the uz/en/ru locale catalog;
+- frontend error/not-found boundaries exist;
+- analytics retention and pending-domain verification maintenance commands exist;
 - frontend lint passes;
 - frontend production build passes;
 - Django compile/check/deployment checks pass;
@@ -37,7 +42,7 @@ python manage.py test platform_v2.tests.test_legacy_migration --verbosity=2
 python manage.py migrate_legacy_v2
 ```
 
-Review the dry-run counts. Then:
+Review the dry-run counts. The dry-run rolls back, so parity is intentionally **not** run yet. Then on the isolated rehearsal database:
 
 ```bash
 python manage.py migrate_legacy_v2 --apply
@@ -57,46 +62,27 @@ Acceptance:
 - an already V2-verified custom domain is not downgraded by a harmless importer rerun;
 - cross-tenant domain collisions fail closed;
 - native V2 site versions created after migration cause a later importer rerun to fail rather than moving live pointers back to legacy content;
-- no legacy `owner_contact` is silently converted into authenticated ownership.
+- no legacy owner-contact field is silently converted into authenticated ownership.
 
 ## Gate C — authentication and authorization
 
-Smoke-test with at least two real Google accounts and two tenants.
-
-Acceptance:
-
-- Google credential is verified server-side;
-- login works;
-- refresh works and rotates the opaque server session;
-- replay of a rotated session token fails;
-- logout invalidates/revokes the server session;
-- Tenant A user cannot list/read/write Tenant B resources;
-- editor cannot perform owner-only operations;
-- analyst cannot mutate site data;
-- team invite can only be accepted by the invited verified email;
-- invitation token is visible only at creation time;
-- pending invitations reserve plan seats;
-- the invited user can consume their own reserved seat;
-- last owner cannot be deleted/demoted;
-- ownership transfer makes the target owner and demotes the previous owner safely.
+Smoke-test with at least two real Google accounts and two tenants. Existing authentication/RBAC acceptance criteria remain unchanged by the non-auth hardening work.
 
 ## Gate D — Site Studio and publish
 
 Acceptance:
 
-- create workspace;
-- create site in selected workspace;
-- edit hero/contact/services/gallery/testimonials/highlights/promo/process/FAQ/hours/location;
+- create workspace and site;
+- edit all supported content blocks;
 - reorder/remove list items;
 - upload valid images;
-- save draft;
-- reload builder and recover draft from server;
+- save draft and recover it from server;
 - publish;
-- public page uses the immutable published snapshot;
-- editing a later draft does not alter the existing live snapshot before another publish;
-- multi-site tenant keeps independent slugs and public routes.
-
-Test Free, Starter, Pro and Business limits separately.
+- public page uses immutable published snapshot;
+- later draft does not alter live content until next publish;
+- multi-site tenant keeps independent slugs/routes;
+- repeated Studio creation of the `default` campaign QR is idempotent and never creates duplicate default QR resources;
+- Free, Starter, Pro and Business limits are tested separately.
 
 ## Gate E — QR
 
@@ -104,27 +90,28 @@ Acceptance:
 
 - QR resource is created for a site;
 - plan QR quota is server-enforced;
-- deactivating QR codes cannot be used to exceed the total plan quota and later reactivate them;
-- QR tenant cannot be changed;
-- QR cannot target a site from another tenant;
-- PNG download opens/scans;
-- SVG download opens/scans;
-- `/q/<code>/` records a scan and redirects to the current canonical `/{tenant}/{site}` URL;
-- a site-rendered QR encodes the exact tenant+site canonical URL, not the tenant default route;
-- disabling or invalid QR returns an appropriate not-found response;
-- changing/publishing site content does not require reprinting the dynamic QR.
+- deactivate/reactivate cannot bypass quota;
+- QR cannot move tenant or target a foreign-tenant site;
+- PNG and SVG download/scan correctly;
+- `/q/<code>/` records scan and redirects to current canonical `/{tenant}/{site}` URL;
+- site-rendered QR encodes exact tenant+site URL;
+- disabled/invalid QR returns not-found;
+- changing published site content does not require reprinting dynamic QR;
+- `campaign=default` creation is idempotent/race-safe while non-default campaign QRs remain independent.
 
-## Gate F — analytics
+## Gate F — analytics and privacy
 
 Acceptance:
 
-- public view increments view analytics once;
-- CTA click records expected target;
-- QR redirect records `qr_scan`;
-- tenant isolation applies to dashboard analytics;
-- raw visitor IP is not persisted by V2 analytics;
-- Free plan does not expose paid advanced analytics;
-- paid advanced analytics response is available only where entitled.
+- public view, CTA click and QR scan record expected event types;
+- tenant isolation applies to analytics;
+- raw visitor IP is never persisted;
+- spoofed `X-Forwarded-For` is ignored unless the deployment explicitly enables trusted-proxy mode;
+- when trusted-proxy mode is enabled, the reverse proxy is proven to overwrite/sanitize forwarded IP headers;
+- Free does not expose paid advanced analytics;
+- paid advanced analytics is available only where entitled;
+- retention dry-run reports old rows without deleting them;
+- retention apply is only enabled after the launch retention/history policy is accepted.
 
 ## Gate G — custom domain and TLS
 
@@ -132,55 +119,49 @@ Use a real test domain.
 
 Acceptance:
 
-- owner/admin can create custom domain only on an entitled plan;
-- custom-domain quota is server-enforced;
-- URL/path/port/IP input is rejected as hostname input;
-- IDNA hostname input is normalized correctly;
-- the platform-owned domain/subdomains cannot be claimed as customer custom domains;
-- a Domain cannot be moved to another tenant;
-- a Domain cannot be retargeted to a foreign-tenant site;
-- changing a verified hostname resets verification and rotates the verification token;
-- DNS TXT instructions are correct;
-- domain remains pending before proof exists;
-- verification succeeds after DNS propagation;
-- host resolver rejects unverified domains;
-- plan downgrade makes an otherwise verified custom domain unroutable when the plan no longer entitles it;
-- TLS approval rejects arbitrary/pending domains;
+- custom-domain entitlement/quota is server-enforced;
+- malformed URL/path/port/IP/platform-owned host input is rejected;
+- IDNA is normalized;
+- domain cannot move tenant or point at a foreign-tenant site;
+- changing verified hostname resets proof and rotates token;
+- TXT instructions are correct and pending stays pending without proof;
+- interactive and bounded batch verification only mark exact successful proofs verified;
+- host resolver/TLS approval reject unverified or unentitled domains;
+- plan downgrade disables routing when entitlement is lost;
 - Caddy obtains a certificate only after approval;
-- HTTPS custom domain renders the intended published site;
-- wrong tenant/site cannot be routed through the domain endpoint.
+- HTTPS custom domain renders the intended published site.
 
 ## Gate H — media/storage
 
 Against the production-compatible object store:
 
-- JPEG upload succeeds;
-- PNG upload succeeds;
-- WebP upload succeeds;
-- SVG/executable/invalid bytes are rejected;
-- oversized bytes/dimensions are rejected;
-- plan media quota is enforced;
-- duplicate content behaves as intended;
+- JPEG/PNG/WebP uploads succeed;
+- SVG/executable/invalid/animated bytes are rejected;
+- oversized bytes/dimensions/decompression-bomb inputs are rejected;
+- accepted images are decoded and canonically re-encoded before storage;
+- EXIF/metadata and appended/polyglot trailing bytes do not survive storage;
+- media listing is paginated, not silently truncated;
+- plan media quota and dedupe behavior are correct;
 - public media URL remains stable after publish;
 - cross-tenant access is impossible;
-- authorized deletion removes the object and DB record.
+- authorized deletion removes DB row and object as expected.
 
 ## Gate I — billing and entitlements
 
 Before accepting real money:
 
-- public pricing catalog and authenticated entitlement payload expose the same server-authoritative limits;
-- Free/Starter/Pro/Business site, member, media, dynamic-QR and custom-domain quotas match product policy;
-- remove-branding is enforced by the public serializer/renderer rather than trusted from the browser;
+- pricing catalog and entitlement payload expose the same server-authoritative limits;
+- Free/Starter/Pro/Business quotas match policy;
+- remove-branding is enforced server-side;
 - provider-specific adapter has its own tests;
-- provider event is normalized into the internal billing webhook contract;
+- provider event is normalized into signed internal webhook contract;
 - invalid signature cannot mutate plan;
 - duplicate event is idempotent;
-- active/trial/past_due/canceled mapping is reviewed with the actual provider semantics;
-- checkout success is not treated as truth without server webhook confirmation;
-- price IDs and environment configuration are documented.
+- provider status mapping is reviewed against real semantics;
+- checkout success is not treated as truth without webhook confirmation;
+- price IDs/configuration are documented.
 
-If the provider is not yet connected, paid-plan checkout must remain unavailable rather than simulated.
+If no real provider is connected, paid checkout remains unavailable rather than simulated.
 
 ## Gate J — backup and restore
 
@@ -188,63 +169,65 @@ Before production migration:
 
 ```bash
 python manage.py backup_v2 --output-dir /secure/off-host/path
-python manage.py restore_drill_v2 /secure/off-host/path/<dump> --target-db qr_business_restore_test
+python manage.py restore_drill_v2 --backup /secure/off-host/path/<dump> --target-db qr_business_restore_test
 ```
 
 Acceptance:
 
-- dump exists;
-- SHA-256 manifest matches;
+- dump exists and SHA-256 manifest matches;
 - isolated restore succeeds;
 - key V2 tables can be queried after restore;
-- production DB name is rejected as restore-drill target.
+- production DB name is rejected as restore target.
 
 ## Gate K — observability and failure behavior
 
 Acceptance:
 
 - request IDs survive reverse proxy;
-- backend access logs include request ID/status/latency;
-- readiness fails when DB/storage is unavailable;
-- 5xx errors are visible in logs/monitoring;
-- billing failures are visible;
-- media failures are visible;
-- custom-domain resolver latency is monitored;
-- no secret/token is written to logs.
+- access logs include request ID/status/latency;
+- readiness probes database, storage and cache and returns 503 if any required dependency is unavailable;
+- production uses shared Redis so cache/throttle state is consistent across backend instances;
+- 5xx errors are visible in external monitoring or an explicitly accepted equivalent;
+- Sentry, when configured, sends no default PII;
+- staff audit viewer exposes operational events without secrets/tokens;
+- billing/media/domain failures and public/QR latency are observable.
 
 ## Gate L — production security configuration
 
-With `DJANGO_DEBUG=False`:
+With `DJANGO_DEBUG=False`, `python manage.py check --deploy` must fail closed unless:
 
 - strong unique `DJANGO_SECRET_KEY`;
 - separate `ANALYTICS_HASH_SALT`;
-- strong `BILLING_WEBHOOK_SECRET`;
-- correct `ALLOWED_HOSTS`;
-- exact CORS origins;
-- secure refresh/session cookies;
-- HTTPS redirect/HSTS intentionally configured;
-- S3 credentials server-only;
-- Google client ID restricted correctly;
+- strong billing webhook secret;
+- `PUBLIC_WEB_BASE_URL` uses HTTPS;
+- shared `REDIS_URL` configured;
+- production S3-compatible bucket configured;
+- exact allowed hosts/CORS origins;
+- secure cookies and intentional HSTS/HTTPS redirect;
+- S3 credentials remain server-only;
 - CSP matches actual frontend/API/media providers;
-- legacy import disabled during normal runtime.
+- forwarded analytics IP trust is enabled only behind a sanitizing trusted proxy;
+- legacy import is disabled during normal runtime.
+
+A missing external error-monitoring DSN is a release warning that requires an explicit operational decision.
 
 ## Gate M — cutover
 
 Immediately before cutover:
 
-1. freeze legacy writes or define the final migration window;
+1. freeze legacy writes or define final migration window;
 2. create verified backup;
 3. run final legacy migration apply;
 4. run exact parity check;
 5. deploy V2 backend;
-6. wait for readiness 200;
+6. wait for readiness 200 including DB/storage/cache;
 7. deploy V2 frontend/edge;
-8. smoke-test login → builder → publish → canonical public page → dynamic QR → analytics → custom domain;
-9. verify old one-slug URLs 308/redirect to canonical two-segment URLs;
-10. monitor errors/latency.
+8. smoke-test account → builder → publish → canonical page → dynamic QR → analytics → custom domain;
+9. verify legacy aliases redirect to canonical route;
+10. monitor errors/latency/audit trail.
 
 Only after parity is confirmed on the real production migration may `backend/core` be physically removed in a separate cleanup commit.
 
 ## Merge rule
 
-Do not merge `rebuild/global-v2` to `main` until Gates A–M that apply to the intended launch scope are complete. A missing external dependency such as payment provider, object store, real DNS domain, production database copy, or executable build environment is a **blocked gate**, not a pass.
+Do not merge `rebuild/global-v2` to `main` until Gates A–M that apply to launch scope are complete. A missing payment provider, object store, Redis, real DNS domain, production database copy or executable environment is a **blocked gate**, not a pass.
