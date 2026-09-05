@@ -130,14 +130,7 @@ class DomainSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         instance = super().create(validated_data)
-        AuditLog.objects.create(
-            tenant=instance.tenant,
-            actor=_actor(self),
-            action="domain.created",
-            object_type="domain",
-            object_id=str(instance.id),
-            metadata={"hostname": instance.hostname, "site_id": str(instance.site_id or "")},
-        )
+        AuditLog.objects.create(tenant=instance.tenant, actor=_actor(self), action="domain.created", object_type="domain", object_id=str(instance.id), metadata={"hostname": instance.hostname, "site_id": str(instance.site_id or "")})
         return instance
 
     def update(self, instance, validated_data):
@@ -158,13 +151,7 @@ class DomainSerializer(serializers.ModelSerializer):
                 action="domain.updated",
                 object_type="domain",
                 object_id=str(instance.id),
-                metadata={
-                    "hostname_from": previous_hostname,
-                    "hostname_to": instance.hostname,
-                    "site_from": str(previous_site_id or ""),
-                    "site_to": str(instance.site_id or ""),
-                    "verification_reset": hostname_changed,
-                },
+                metadata={"hostname_from": previous_hostname, "hostname_to": instance.hostname, "site_from": str(previous_site_id or ""), "site_to": str(instance.site_id or ""), "verification_reset": hostname_changed},
             )
         return instance
 
@@ -187,48 +174,40 @@ class QRCodeSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         campaign = str(validated_data.get("campaign") or "").strip()
-        site = validated_data["site"]
-        if campaign == "default":
-            # The Studio asks for a default QR after publish. Make that operation
-            # idempotent so a paginated/stale client cannot create duplicates.
-            with transaction.atomic():
-                Site.objects.select_for_update().get(pk=site.pk)
+        with transaction.atomic():
+            tenant = Tenant.objects.select_for_update().get(pk=validated_data["tenant"].pk)
+            site = Site.objects.select_for_update().get(pk=validated_data["site"].pk, tenant=tenant)
+            validated_data["tenant"] = tenant
+            validated_data["site"] = site
+            if campaign == "default":
                 existing = QRCode.objects.filter(site=site, campaign="default").order_by("created_at", "id").first()
                 if existing:
                     return existing
-                enforce_qr_create(validated_data["tenant"])
-                instance = super().create(validated_data)
-        else:
-            enforce_qr_create(validated_data["tenant"])
+            enforce_qr_create(tenant)
             instance = super().create(validated_data)
-
-        AuditLog.objects.create(
-            tenant=instance.tenant,
-            actor=_actor(self),
-            action="qr.created",
-            object_type="qr_code",
-            object_id=str(instance.id),
-            metadata={"site_id": str(instance.site_id), "label": instance.label, "campaign": instance.campaign},
-        )
-        return instance
-
-    def update(self, instance, validated_data):
-        validated_data.pop("tenant", None)
-        if not instance.is_active and validated_data.get("is_active") is True:
-            enforce_qr_create(instance.tenant)
-        before = {"site_id": str(instance.site_id), "label": instance.label, "campaign": instance.campaign, "is_active": instance.is_active}
-        instance = super().update(instance, validated_data)
-        after = {"site_id": str(instance.site_id), "label": instance.label, "campaign": instance.campaign, "is_active": instance.is_active}
-        if before != after:
             AuditLog.objects.create(
                 tenant=instance.tenant,
                 actor=_actor(self),
-                action="qr.updated",
+                action="qr.created",
                 object_type="qr_code",
                 object_id=str(instance.id),
-                metadata={"before": before, "after": after},
+                metadata={"site_id": str(instance.site_id), "label": instance.label, "campaign": instance.campaign},
             )
-        return instance
+            return instance
+
+    def update(self, instance, validated_data):
+        validated_data.pop("tenant", None)
+        with transaction.atomic():
+            tenant = Tenant.objects.select_for_update().get(pk=instance.tenant_id)
+            locked = QRCode.objects.select_for_update().get(pk=instance.pk)
+            if not locked.is_active and validated_data.get("is_active") is True:
+                enforce_qr_create(tenant)
+            before = {"site_id": str(locked.site_id), "label": locked.label, "campaign": locked.campaign, "is_active": locked.is_active}
+            instance = super().update(locked, validated_data)
+            after = {"site_id": str(instance.site_id), "label": instance.label, "campaign": instance.campaign, "is_active": instance.is_active}
+            if before != after:
+                AuditLog.objects.create(tenant=tenant, actor=_actor(self), action="qr.updated", object_type="qr_code", object_id=str(instance.id), metadata={"before": before, "after": after})
+            return instance
 
 
 class MediaAssetSerializer(serializers.ModelSerializer):
