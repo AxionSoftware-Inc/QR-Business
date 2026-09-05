@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .admin_views import PlatformAdminOverviewView
+from .admin_views import PlatformAdminAuditLogView, PlatformAdminOverviewView, PlatformAdminSiteListView
 from .auth_views import GoogleLoginView, LogoutView, MeView, SessionRefreshView
 from .billing_views import BillingWebhookView
 from .catalog_views import PublicPlanCatalogView
@@ -30,6 +30,8 @@ urlpatterns = [
     path("auth/logout/", LogoutView.as_view(), name="v2-auth-logout"),
     path("auth/me/", MeView.as_view(), name="v2-auth-me"),
     path("admin/overview/", PlatformAdminOverviewView.as_view(), name="v2-admin-overview"),
+    path("admin/sites/", PlatformAdminSiteListView.as_view(), name="v2-admin-sites"),
+    path("admin/audit/", PlatformAdminAuditLogView.as_view(), name="v2-admin-audit"),
     path("billing/webhook/", BillingWebhookView.as_view(), name="v2-billing-webhook"),
     path("team/invitations/accept/", TeamInvitationAcceptView.as_view(), name="v2-team-invite-accept"),
     path("tenants/<uuid:tenant_id>/team/invitations/", TeamInvitationListCreateView.as_view(), name="v2-team-invitations"),
