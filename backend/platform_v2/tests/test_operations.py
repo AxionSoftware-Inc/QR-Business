@@ -8,7 +8,8 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from platform_v2.models import AnalyticsEvent, AuditLog, Domain, Site, Tenant
+from platform_v2.analytics import site_analytics
+from platform_v2.models import AnalyticsDailyRollup, AnalyticsEvent, AuditLog, Domain, Site, Tenant
 
 
 User = get_user_model()
@@ -63,20 +64,37 @@ class MaintenanceCommandTests(TestCase):
         self.tenant = Tenant.objects.create(name="Maintenance", slug="maintenance", status=Tenant.Status.ACTIVE)
         self.site = Site.objects.create(tenant=self.tenant, slug="main", name="Main")
 
-    def test_prune_analytics_is_dry_run_by_default(self):
-        event = AnalyticsEvent.objects.create(tenant=self.tenant, site=self.site, event_type=AnalyticsEvent.EventType.VIEW)
+    def old_event(self, event_type, target=""):
+        event = AnalyticsEvent.objects.create(tenant=self.tenant, site=self.site, event_type=event_type, target=target)
         AnalyticsEvent.objects.filter(id=event.id).update(occurred_at=timezone.now() - timedelta(days=500))
+        return event
+
+    def test_prune_analytics_is_dry_run_by_default(self):
+        event = self.old_event(AnalyticsEvent.EventType.VIEW)
         output = StringIO()
         call_command("prune_analytics_v2", "--days", "365", stdout=output)
         self.assertTrue(AnalyticsEvent.objects.filter(id=event.id).exists())
+        self.assertEqual(AnalyticsDailyRollup.objects.count(), 0)
         self.assertIn("DRY-RUN", output.getvalue())
 
-    def test_prune_analytics_apply_deletes_old_rows_and_audits(self):
-        event = AnalyticsEvent.objects.create(tenant=self.tenant, site=self.site, event_type=AnalyticsEvent.EventType.VIEW)
-        AnalyticsEvent.objects.filter(id=event.id).update(occurred_at=timezone.now() - timedelta(days=500))
+    def test_compaction_preserves_totals_and_top_targets(self):
+        self.old_event(AnalyticsEvent.EventType.VIEW)
+        self.old_event(AnalyticsEvent.EventType.VIEW)
+        self.old_event(AnalyticsEvent.EventType.QR_SCAN)
+        self.old_event(AnalyticsEvent.EventType.CTA_CLICK, "call")
+        self.old_event(AnalyticsEvent.EventType.CTA_CLICK, "call")
+        self.old_event(AnalyticsEvent.EventType.CTA_CLICK, "map")
+
+        before = site_analytics(self.site, advanced=True, daily_days=1000)
         call_command("prune_analytics_v2", "--days", "365", "--apply", stdout=StringIO())
-        self.assertFalse(AnalyticsEvent.objects.filter(id=event.id).exists())
-        self.assertTrue(AuditLog.objects.filter(action="analytics.retention_prune").exists())
+        after = site_analytics(self.site, advanced=True, daily_days=1000)
+
+        self.assertEqual(AnalyticsEvent.objects.filter(site=self.site).count(), 0)
+        self.assertGreater(AnalyticsDailyRollup.objects.filter(site=self.site).count(), 0)
+        self.assertEqual(before["totals"], after["totals"])
+        self.assertEqual(before["top_targets"], after["top_targets"])
+        self.assertEqual(before["daily"], after["daily"])
+        self.assertTrue(AuditLog.objects.filter(action="analytics.retention_compact").exists())
 
     @patch("platform_v2.management.commands.verify_pending_domains_v2.dns.resolver.resolve")
     def test_domain_batch_verifier_is_dry_run_then_apply(self, resolve):
