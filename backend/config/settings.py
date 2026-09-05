@@ -62,12 +62,7 @@ if REDIS_URL:
         }
     }
 else:
-    CACHES = {
-        "default": {
-            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "qr-business-v2-dev",
-        }
-    }
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "qr-business-v2-dev"}}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DEFAULT_RENDERER_CLASSES = ["rest_framework.renderers.JSONRenderer"]
@@ -95,6 +90,7 @@ CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORI
 CORS_ALLOW_CREDENTIALS = True
 PUBLIC_WEB_BASE_URL = os.getenv("PUBLIC_WEB_BASE_URL", "http://localhost:3000")
 ANALYTICS_HASH_SALT = os.getenv("ANALYTICS_HASH_SALT", SECRET_KEY)
+ANALYTICS_TRUST_X_FORWARDED_FOR = os.getenv("ANALYTICS_TRUST_X_FORWARDED_FOR", "False").lower() == "true"
 SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", str(not DEBUG)).lower() == "true"
 SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", str(not DEBUG)).lower() == "true"
 CSRF_COOKIE_SECURE = os.getenv("CSRF_COOKIE_SECURE", str(not DEBUG)).lower() == "true"
