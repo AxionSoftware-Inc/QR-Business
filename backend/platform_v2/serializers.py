@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.files.storage import default_storage
+from django.db import transaction
 from rest_framework import serializers
 
 from .entitlements import enforce_qr_create, for_tenant
@@ -185,8 +186,22 @@ class QRCodeSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        enforce_qr_create(validated_data["tenant"])
-        instance = super().create(validated_data)
+        campaign = str(validated_data.get("campaign") or "").strip()
+        site = validated_data["site"]
+        if campaign == "default":
+            # The Studio asks for a default QR after publish. Make that operation
+            # idempotent so a paginated/stale client cannot create duplicates.
+            with transaction.atomic():
+                Site.objects.select_for_update().get(pk=site.pk)
+                existing = QRCode.objects.filter(site=site, campaign="default").order_by("created_at", "id").first()
+                if existing:
+                    return existing
+                enforce_qr_create(validated_data["tenant"])
+                instance = super().create(validated_data)
+        else:
+            enforce_qr_create(validated_data["tenant"])
+            instance = super().create(validated_data)
+
         AuditLog.objects.create(
             tenant=instance.tenant,
             actor=_actor(self),
