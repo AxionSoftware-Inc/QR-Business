@@ -1,13 +1,14 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import QRCode from "qrcode";
+import { validatePublicQrTarget } from "@/modules/qr/public-target";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const value = url.searchParams.get("url") ?? "";
-  const title = url.searchParams.get("title") ?? "QR Business";
+  const value = validatePublicQrTarget(url.searchParams.get("url") ?? "");
+  const title = (url.searchParams.get("title") ?? "QR Business").trim().slice(0, 60);
 
   if (!value) {
-    return Response.json({ detail: "url is required." }, { status: 400 });
+    return Response.json({ detail: "A valid platform public URL is required." }, { status: 400 });
   }
 
   const qr = await QRCode.toDataURL(value, {
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
     });
   };
 
-  centerText(title.slice(0, 60), 800, 18, true);
+  centerText(title || "QR Business", 800, 18, true);
   centerText(value.slice(0, 88), 780, 9, false, rgb(0.39, 0.45, 0.55));
 
   const startX = 48;
@@ -57,7 +58,7 @@ export async function GET(request: Request) {
       });
       page.drawImage(qrImage, { x: x + 14, y: y + 34, width: qrSize, height: qrSize });
 
-      const stickerTitle = title.slice(0, 28);
+      const stickerTitle = (title || "QR Business").slice(0, 28);
       const titleWidth = bold.widthOfTextAtSize(stickerTitle, 9);
       page.drawText(stickerTitle, {
         x: x + Math.max(8, (140 - titleWidth) / 2),
@@ -86,6 +87,7 @@ export async function GET(request: Request) {
       "Cache-Control": "no-store",
       "Content-Disposition": "attachment; filename=\"qr-stickers.pdf\"",
       "Content-Type": "application/pdf",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

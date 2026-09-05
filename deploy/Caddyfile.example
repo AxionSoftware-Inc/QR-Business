@@ -1,0 +1,21 @@
+{
+  on_demand_tls {
+    ask http://backend:8000/api/v2/public/tls-allow/
+  }
+}
+
+# Platform domain. Replace qr.example.com with the production ROOT_DOMAIN.
+qr.example.com, *.qr.example.com {
+  encode zstd gzip
+  reverse_proxy frontend:3000
+}
+
+# Verified customer domains. Caddy asks the V2 backend before issuing any
+# certificate, preventing arbitrary-domain certificate abuse.
+https:// {
+  tls {
+    on_demand
+  }
+  encode zstd gzip
+  reverse_proxy frontend:3000
+}

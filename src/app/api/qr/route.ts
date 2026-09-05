@@ -1,12 +1,16 @@
 import QRCode from "qrcode";
+import { validatePublicQrTarget } from "@/modules/qr/public-target";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const value = url.searchParams.get("url") ?? "";
-  const format = url.searchParams.get("format") ?? "png";
+  const value = validatePublicQrTarget(url.searchParams.get("url") ?? "");
+  const format = (url.searchParams.get("format") ?? "png").toLowerCase();
 
   if (!value) {
-    return Response.json({ detail: "url is required." }, { status: 400 });
+    return Response.json({ detail: "A valid platform public URL is required." }, { status: 400 });
+  }
+  if (format !== "png" && format !== "svg") {
+    return Response.json({ detail: "format must be png or svg." }, { status: 400 });
   }
 
   if (format === "svg") {
@@ -21,6 +25,7 @@ export async function GET(request: Request) {
         "Cache-Control": "public, max-age=3600",
         "Content-Disposition": "attachment; filename=\"qr.svg\"",
         "Content-Type": "image/svg+xml",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   }
@@ -31,13 +36,12 @@ export async function GET(request: Request) {
     scale: 8,
   });
 
-  const body = new Uint8Array(buffer);
-
-  return new Response(body, {
+  return new Response(new Uint8Array(buffer), {
     headers: {
       "Cache-Control": "public, max-age=3600",
       "Content-Disposition": "attachment; filename=\"qr.png\"",
       "Content-Type": "image/png",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

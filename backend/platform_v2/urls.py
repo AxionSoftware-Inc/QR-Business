@@ -1,0 +1,50 @@
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
+
+from .admin_views import PlatformAdminAuditLogView, PlatformAdminOverviewView, PlatformAdminSiteListView
+from .auth_views import GoogleLoginView, LogoutView, MeView, SessionRefreshView
+from .billing_views import BillingWebhookView
+from .catalog_views import PublicPlanCatalogView
+from .compat_views import PublicDefaultSiteView
+from .media_views import MediaAssetViewSet
+from .ops_views import ReadinessView
+from .public_routing_views import PublicHostResolverView
+from .team_views import OwnershipTransferView, TeamInvitationAcceptView, TeamInvitationListCreateView, TeamInvitationRevokeView, TeamMemberDetailView
+from .tls_views import TLSApprovalView
+from .views import DomainViewSet, HealthView, PublicEventView, PublicSiteBySlugView, QRCodeViewSet, QRRedirectView, SiteViewSet, TenantViewSet
+from .workspace_views import WorkspacePrimaryQRCodesView
+
+router = DefaultRouter()
+router.register("tenants", TenantViewSet, basename="v2-tenant")
+router.register("sites", SiteViewSet, basename="v2-site")
+router.register("domains", DomainViewSet, basename="v2-domain")
+router.register("qr-codes", QRCodeViewSet, basename="v2-qr-code")
+router.register("media", MediaAssetViewSet, basename="v2-media")
+
+urlpatterns = [
+    path("health/", HealthView.as_view(), name="v2-health"),
+    path("ready/", ReadinessView.as_view(), name="v2-ready"),
+    path("plans/", PublicPlanCatalogView.as_view(), name="v2-plan-catalog"),
+    path("auth/google/", GoogleLoginView.as_view(), name="v2-auth-google"),
+    path("auth/refresh/", SessionRefreshView.as_view(), name="v2-auth-refresh"),
+    path("auth/logout/", LogoutView.as_view(), name="v2-auth-logout"),
+    path("auth/me/", MeView.as_view(), name="v2-auth-me"),
+    path("admin/overview/", PlatformAdminOverviewView.as_view(), name="v2-admin-overview"),
+    path("admin/sites/", PlatformAdminSiteListView.as_view(), name="v2-admin-sites"),
+    path("admin/audit/", PlatformAdminAuditLogView.as_view(), name="v2-admin-audit"),
+    path("billing/webhook/", BillingWebhookView.as_view(), name="v2-billing-webhook"),
+    path("team/invitations/accept/", TeamInvitationAcceptView.as_view(), name="v2-team-invite-accept"),
+    path("tenants/<uuid:tenant_id>/team/invitations/", TeamInvitationListCreateView.as_view(), name="v2-team-invitations"),
+    path("team/invitations/<uuid:invitation_id>/revoke/", TeamInvitationRevokeView.as_view(), name="v2-team-invite-revoke"),
+    path("team/members/<uuid:membership_id>/", TeamMemberDetailView.as_view(), name="v2-team-member"),
+    path("tenants/<uuid:tenant_id>/team/transfer-ownership/", OwnershipTransferView.as_view(), name="v2-team-transfer-ownership"),
+    path("tenants/<uuid:tenant_id>/workspace/primary-qr-codes/", WorkspacePrimaryQRCodesView.as_view(), name="v2-workspace-primary-qrs"),
+    path("public/resolve-host/", PublicHostResolverView.as_view(), name="v2-public-resolve-host"),
+    path("public/tls-allow/", TLSApprovalView.as_view(), name="v2-public-tls-allow"),
+    path("public/sites/<slug:tenant_slug>/", PublicDefaultSiteView.as_view(), name="v2-public-default-site"),
+    path("public/sites/<slug:tenant_slug>/<slug:site_slug>/", PublicSiteBySlugView.as_view(), name="v2-public-site"),
+    path("public/sites/<uuid:site_id>/events/", PublicEventView.as_view(), name="v2-public-event"),
+    path("", include(router.urls)),
+]
+
+public_redirect_patterns = [path("q/<str:code>/", QRRedirectView.as_view(), name="v2-qr-redirect")]

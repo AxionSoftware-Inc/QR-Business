@@ -65,9 +65,11 @@ export function PublicSiteRenderer({ site }: PublicSiteRendererProps) {
             <BlockRenderer block={block} key={block.id} />
           ))}
           <PublicQrPanel site={site} />
-          <footer className="pb-5 pt-2 text-center text-xs font-medium text-black/40 lg:text-left">
-            qr.dirac.space orqali tayyorlandi
-          </footer>
+          {site.showPlatformBranding ? (
+            <footer className="pb-5 pt-2 text-center text-xs font-medium text-black/40 lg:text-left">
+              qr.dirac.space orqali tayyorlandi
+            </footer>
+          ) : null}
         </section>
       </div>
     </main>
@@ -147,9 +149,11 @@ function ProSiteRenderer({ site }: PublicSiteRendererProps) {
 
         <PublicQrPanel site={site} variant="pro" />
 
-        <footer className="pb-5 pt-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-black/35">
-          Pro QR site by qr.dirac.space
-        </footer>
+        {site.showPlatformBranding ? (
+          <footer className="pb-5 pt-2 text-center text-xs font-semibold uppercase tracking-[0.18em] text-black/35">
+            Pro QR site by qr.dirac.space
+          </footer>
+        ) : null}
       </div>
     </main>
   );
@@ -164,11 +168,11 @@ function PublicQrPanel({
 }) {
   const baseUrl =
     process.env.NEXT_PUBLIC_SITE_BASE_URL ?? "http://127.0.0.1:3000";
-  const publicUrl = `${baseUrl}/${site.tenantSlug ?? ""}`;
+  const publicUrl = `${baseUrl}/${site.tenantSlug}/${site.siteSlug}`;
   const qrUrl = `/api/qr?url=${encodeURIComponent(publicUrl)}`;
   const qrSvgUrl = `${qrUrl}&format=svg`;
   const qrPdfUrl = `/api/qr-sheet?url=${encodeURIComponent(publicUrl)}&title=${encodeURIComponent(site.title)}`;
-  const fileName = `${(site.tenantSlug ?? site.title).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "qr-site"}.png`;
+  const fileName = `${`${site.tenantSlug}-${site.siteSlug}`.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "qr-site"}.png`;
   const svgFileName = fileName.replace(/\.png$/, ".svg");
 
   if (variant === "pro") {
