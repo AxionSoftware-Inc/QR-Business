@@ -8,3 +8,5 @@ qrcode[pil]>=8.2,<8.3
 google-auth>=2.40,<3
 dnspython>=2.7,<2.8
 django-storages[s3]>=1.14,<1.15
+django-redis>=5.4,<5.5
+sentry-sdk[django]>=2.35,<3
