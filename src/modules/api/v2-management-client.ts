@@ -11,6 +11,8 @@ export type V2MediaAsset = { id:string; tenant:string; kind:"image"; url:string;
 export type V2Analytics = { totals:Array<{event_type:"view"|"qr_scan"|"cta_click";count:number}>; top_targets:Array<{target:string;count:number}>; daily?:Array<{day:string;event_type:string;count:number}> };
 export type V2TenantAnalytics = { totals:V2Analytics["totals"]; sites:Record<string,V2Analytics>; daily?:V2Analytics["daily"] };
 export type V2AdminOverview={tenants:number;sites:{total:number;published:number;draft:number;disabled:number};qr_codes:number;active_qr_codes:number;custom_domains:number;verified_domains:number};
+export type V2AuditLog={id:string;tenant_id:string|null;tenant_name:string|null;actor_id:string|null;actor_email:string|null;action:string;object_type:string;object_id:string;metadata:Record<string,unknown>;created_at:string};
+export type V2Page<T>={count:number;next:string|null;previous:string|null;results:T[]};
 export type V2DraftPayload = { title:string; description?:string; template_key?:string; theme?:Record<string,unknown>; blocks?:unknown[]; seo?:Record<string,unknown> };
 export type V2Entitlements = {
   plan:V2Tenant["plan"];
@@ -20,11 +22,11 @@ export type V2Entitlements = {
 };
 export type V2MembershipRow = { id:string; user:number; email:string; name:string; role:"owner"|"admin"|"editor"|"analyst"; is_active:boolean; created_at:string; updated_at:string };
 export type V2TeamInvitation = { id:string; tenant:string; email:string; role:"admin"|"editor"|"analyst"; status:"pending"|"accepted"|"revoked"|"expired"; expires_at:string; invited_by:number|null; accepted_by:number|null; accepted_at:string|null; created_at:string; token?:string };
-type V2Page<T>={count:number;next:string|null;previous:string|null;results:T[]};
 
 async function json<T>(path:string, init:RequestInit={}):Promise<T>{ const response=await authorizedV2Fetch(path,init); if(!response.ok){let detail=`Request failed (${response.status})`;try{const body=await response.json() as {detail?:string};if(body.detail)detail=body.detail;}catch{} throw new Error(detail);} if(response.status===204)return undefined as T; return await response.json() as T; }
 async function listJson<T>(path:string):Promise<T[]>{const payload=await json<T[]|V2Page<T>>(path);return Array.isArray(payload)?payload:payload.results;}
 function withTenant(path:string,tenantId?:string){if(!tenantId)return path;const join=path.includes("?")?"&":"?";return `${path}${join}tenant=${encodeURIComponent(tenantId)}`;}
+function withQuery(path:string,params:Record<string,string|number|undefined>){const search=new URLSearchParams();for(const [key,value] of Object.entries(params)){if(value!==undefined&&String(value)!=="")search.set(key,String(value));}const query=search.toString();return query?`${path}?${query}`:path;}
 
 export const listV2Tenants=()=>listJson<V2Tenant>("/api/v2/tenants/");
 export function createV2Tenant(input:{name:string;slug:string;locale?:string;timezone?:string}){return json<V2Tenant>("/api/v2/tenants/",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:input.name,slug:input.slug,locale:input.locale??"uz",timezone:input.timezone??"Asia/Tashkent"})});}
@@ -32,6 +34,8 @@ export function updateV2Tenant(tenantId:string,input:Partial<Pick<V2Tenant,"name
 export const getV2Entitlements=(tenantId:string)=>json<V2Entitlements>(`/api/v2/tenants/${tenantId}/entitlements/`);
 export const getV2TenantAnalytics=(tenantId:string)=>json<V2TenantAnalytics>(`/api/v2/tenants/${tenantId}/analytics/`);
 export const getV2AdminOverview=()=>json<V2AdminOverview>("/api/v2/admin/overview/");
+export const getV2AdminSites=(input:{page?:number;q?:string;status?:string}={})=>json<V2Page<V2Site>>(withQuery("/api/v2/admin/sites/",input));
+export const getV2AdminAudit=(input:{page?:number;q?:string;action?:string;tenant?:string}={})=>json<V2Page<V2AuditLog>>(withQuery("/api/v2/admin/audit/",input));
 export const listV2Members=(tenantId:string)=>json<V2MembershipRow[]>(`/api/v2/tenants/${tenantId}/members/`);
 export const listV2TeamInvitations=(tenantId:string)=>json<V2TeamInvitation[]>(`/api/v2/tenants/${tenantId}/team/invitations/`);
 export function createV2TeamInvitation(tenantId:string,input:{email:string;role:"admin"|"editor"|"analyst"}){return json<V2TeamInvitation>(`/api/v2/tenants/${tenantId}/team/invitations/`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(input)});}
