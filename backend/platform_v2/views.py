@@ -5,8 +5,6 @@ import dns.resolver
 import qrcode
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Count
-from django.db.models.functions import TruncDate
 from django.http import HttpResponse, HttpResponseRedirect
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -17,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .access import ACTIVE_TENANT_STATUSES, can_admin, can_write, user_tenant_ids
+from .analytics import site_analytics, tenant_analytics
 from .entitlements import entitlement_payload, enforce_custom_domain, enforce_site_create, for_tenant
 from .models import AnalyticsEvent, AuditLog, Domain, Membership, QRCode, Site, Tenant
 from .permissions import CanAdministerTenant, CanEditTenantObject
@@ -78,38 +77,7 @@ class TenantViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="analytics")
     def analytics(self, request, pk=None):
         tenant = self.get_object()
-        events = AnalyticsEvent.objects.filter(tenant=tenant)
-        totals = list(events.values("event_type").annotate(count=Count("id")).order_by("event_type"))
-        per_site = {}
-        for row in events.values("site_id", "event_type").annotate(count=Count("id")).order_by("site_id", "event_type"):
-            bucket = per_site.setdefault(str(row["site_id"]), {"totals": [], "top_targets": []})
-            bucket["totals"].append({"event_type": row["event_type"], "count": row["count"]})
-
-        target_counts = {}
-        target_rows = (
-            events.filter(event_type=AnalyticsEvent.EventType.CTA_CLICK)
-            .exclude(target="")
-            .values("site_id", "target")
-            .annotate(count=Count("id"))
-            .order_by("site_id", "-count")
-        )
-        for row in target_rows:
-            site_id = str(row["site_id"])
-            seen = target_counts.get(site_id, 0)
-            if seen >= 20:
-                continue
-            per_site.setdefault(site_id, {"totals": [], "top_targets": []})["top_targets"].append({"target": row["target"], "count": row["count"]})
-            target_counts[site_id] = seen + 1
-
-        response = {"totals": totals, "sites": per_site}
-        if for_tenant(tenant).advanced_analytics:
-            response["daily"] = list(
-                events.annotate(day=TruncDate("occurred_at"))
-                .values("day", "event_type")
-                .annotate(count=Count("id"))
-                .order_by("day", "event_type")[-360:]
-            )
-        return Response(response)
+        return Response(tenant_analytics(tenant, advanced=for_tenant(tenant).advanced_analytics, daily_days=360))
 
 
 class SiteViewSet(viewsets.ModelViewSet):
@@ -171,24 +139,7 @@ class SiteViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="analytics")
     def analytics(self, request, pk=None):
         site = self.get_object()
-        events = site.analytics_events.all()
-        totals = events.values("event_type").annotate(count=Count("id"))
-        targets = (
-            events.filter(event_type=AnalyticsEvent.EventType.CTA_CLICK)
-            .exclude(target="")
-            .values("target")
-            .annotate(count=Count("id"))
-            .order_by("-count")[:20]
-        )
-        response = {"totals": list(totals), "top_targets": list(targets)}
-        if for_tenant(site.tenant).advanced_analytics:
-            response["daily"] = list(
-                events.annotate(day=TruncDate("occurred_at"))
-                .values("day", "event_type")
-                .annotate(count=Count("id"))
-                .order_by("day", "event_type")[-90:]
-            )
-        return Response(response)
+        return Response(site_analytics(site, advanced=for_tenant(site.tenant).advanced_analytics, daily_days=90))
 
 
 class DomainViewSet(viewsets.ModelViewSet):
