@@ -50,6 +50,25 @@ if S3_BUCKET_NAME:
         "staticfiles": {"BACKEND":"django.contrib.staticfiles.storage.StaticFilesStorage"},
     }
 
+REDIS_URL = os.getenv("REDIS_URL", "").strip()
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+            "KEY_PREFIX": os.getenv("CACHE_KEY_PREFIX", "qr-business-v2"),
+            "TIMEOUT": int(os.getenv("CACHE_DEFAULT_TIMEOUT", "300")),
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "qr-business-v2-dev",
+        }
+    }
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DEFAULT_RENDERER_CLASSES = ["rest_framework.renderers.JSONRenderer"]
 if DEBUG:
@@ -91,3 +110,14 @@ LOGGING = {
     "loggers":{"qr.access":{"handlers":["console"],"level":os.getenv("DJANGO_ACCESS_LOG_LEVEL","INFO"),"propagate":False}},
     "root":{"handlers":["console"],"level":os.getenv("DJANGO_LOG_LEVEL","INFO")},
 }
+
+SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
+if SENTRY_DSN:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=os.getenv("SENTRY_ENVIRONMENT", "production" if not DEBUG else "development"),
+        release=os.getenv("APP_RELEASE") or None,
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.05")),
+        send_default_pii=False,
+    )
