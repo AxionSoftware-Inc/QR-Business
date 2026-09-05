@@ -59,24 +59,12 @@ def next_version_number(site):
 def save_draft(*, site, payload, actor):
     site = Site.objects.select_for_update().get(pk=site.pk)
     clean = validate_site_payload(payload)
-    version = SiteVersion.objects.create(
-        site=site,
-        version=next_version_number(site),
-        created_by=actor,
-        **clean,
-    )
+    version = SiteVersion.objects.create(site=site, version=next_version_number(site), created_by=actor, **clean)
     site.draft_version = version
     if not site.published_version:
         site.status = Site.Status.DRAFT
     site.save(update_fields=["draft_version", "status", "updated_at"])
-    AuditLog.objects.create(
-        tenant=site.tenant,
-        actor=actor,
-        action="site.draft_saved",
-        object_type="site",
-        object_id=str(site.pk),
-        metadata={"version": version.version},
-    )
+    AuditLog.objects.create(tenant=site.tenant, actor=actor, action="site.draft_saved", object_type="site", object_id=str(site.pk), metadata={"version": version.version})
     return version
 
 
@@ -102,20 +90,26 @@ def publish_site(*, site, actor):
     site.status = Site.Status.PUBLISHED
     site.published_at = timezone.now()
     site.save(update_fields=["published_version", "status", "published_at", "updated_at"])
-    AuditLog.objects.create(
-        tenant=site.tenant,
-        actor=actor,
-        action="site.published",
-        object_type="site",
-        object_id=str(site.pk),
-        metadata={"version": published.version},
-    )
+    AuditLog.objects.create(tenant=site.tenant, actor=actor, action="site.published", object_type="site", object_id=str(site.pk), metadata={"version": published.version})
     return published
 
 
+def analytics_client_ip(request):
+    """Use proxy headers only when the deployment explicitly trusts its edge proxy.
+
+    A directly reachable application must not let arbitrary clients mint distinct
+    analytics identities by spoofing X-Forwarded-For.
+    """
+    trust_forwarded = bool(getattr(settings, "ANALYTICS_TRUST_X_FORWARDED_FOR", False))
+    if trust_forwarded:
+        forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()[:64]
+    return str(request.META.get("REMOTE_ADDR", "") or "")[:64]
+
+
 def visitor_hash(request):
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    ip = forwarded.split(",")[0].strip() if forwarded else request.META.get("REMOTE_ADDR", "")
+    ip = analytics_client_ip(request)
     user_agent = request.META.get("HTTP_USER_AGENT", "")[:512]
     salt = getattr(settings, "ANALYTICS_HASH_SALT", settings.SECRET_KEY)
     day = timezone.now().strftime("%Y-%m-%d")
