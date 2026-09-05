@@ -6,6 +6,7 @@ from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.db import transaction
 from PIL import Image, ImageOps, UnidentifiedImageError
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -103,7 +104,7 @@ class MediaAssetViewSet(viewsets.ViewSet):
             return Response({"detail": "Image exceeds 8 MB."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            safe_bytes, image_format, width, height, media = sanitize_image(raw)
+            safe_bytes, _image_format, width, height, media = sanitize_image(raw)
         except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning, ValueError) as exc:
             detail = str(exc) if isinstance(exc, ValueError) else "File is not a safe supported image."
             return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
@@ -113,31 +114,37 @@ class MediaAssetViewSet(viewsets.ViewSet):
         if existing:
             return Response(MediaAssetSerializer(existing).data, status=status.HTTP_200_OK)
 
-        enforce_media_create(tenant)
         content_type, extension = media
         storage_key = f"tenant-media/{tenant_id}/{digest[:2]}/{digest}-{secrets.token_hex(4)}{extension}"
         saved_key = default_storage.save(storage_key, ContentFile(safe_bytes))
         try:
-            asset = MediaAsset.objects.create(
-                tenant_id=tenant_id,
-                uploaded_by=request.user,
-                storage_key=saved_key,
-                original_name=Path(uploaded.name or "image").name[:255],
-                content_type=content_type,
-                byte_size=len(safe_bytes),
-                width=width,
-                height=height,
-                sha256=digest,
-                alt=str(request.data.get("alt") or "").strip()[:240],
-            )
-            AuditLog.objects.create(
-                tenant=tenant,
-                actor=request.user,
-                action="media.created",
-                object_type="media_asset",
-                object_id=str(asset.id),
-                metadata={"content_type": content_type, "byte_size": len(safe_bytes), "width": width, "height": height, "sha256": digest, "sanitized": True},
-            )
+            with transaction.atomic():
+                locked_tenant = Tenant.objects.select_for_update().get(pk=tenant_id)
+                concurrent_existing = MediaAsset.objects.filter(tenant=locked_tenant, sha256=digest).first()
+                if concurrent_existing:
+                    default_storage.delete(saved_key)
+                    return Response(MediaAssetSerializer(concurrent_existing).data, status=status.HTTP_200_OK)
+                enforce_media_create(locked_tenant)
+                asset = MediaAsset.objects.create(
+                    tenant=locked_tenant,
+                    uploaded_by=request.user,
+                    storage_key=saved_key,
+                    original_name=Path(uploaded.name or "image").name[:255],
+                    content_type=content_type,
+                    byte_size=len(safe_bytes),
+                    width=width,
+                    height=height,
+                    sha256=digest,
+                    alt=str(request.data.get("alt") or "").strip()[:240],
+                )
+                AuditLog.objects.create(
+                    tenant=locked_tenant,
+                    actor=request.user,
+                    action="media.created",
+                    object_type="media_asset",
+                    object_id=str(asset.id),
+                    metadata={"content_type": content_type, "byte_size": len(safe_bytes), "width": width, "height": height, "sha256": digest, "sanitized": True},
+                )
         except Exception:
             default_storage.delete(saved_key)
             raise
