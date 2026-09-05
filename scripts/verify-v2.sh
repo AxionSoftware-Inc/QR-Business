@@ -38,13 +38,18 @@ if ! grep -q 'showPlatformBranding: true' src/modules/guest/guest-site-factory.t
 if ! grep -q 'enforce_qr_create' backend/platform_v2/serializers.py; then echo "Dynamic QR plan enforcement is missing." >&2; exit 1; fi
 if ! grep -q 'normalize_custom_hostname' backend/platform_v2/serializers.py; then echo "Custom-domain normalization/validation is missing." >&2; exit 1; fi
 if ! grep -q 'DEFAULT_PAGINATION_CLASS' backend/config/settings.py; then echo "Bounded API pagination is missing." >&2; exit 1; fi
+if ! grep -q 'V2PageNumberPagination' backend/platform_v2/media_views.py; then echo "Media list pagination is missing." >&2; exit 1; fi
 if ! grep -q 'url_path="analytics"' backend/platform_v2/views.py; then echo "Tenant batch analytics endpoint is missing." >&2; exit 1; fi
 if ! grep -q 'getV2TenantAnalytics' src/app/guest/dashboard/guest-dashboard-client.tsx; then echo "Dashboard regressed to per-site analytics requests." >&2; exit 1; fi
-if ! grep -q 'PlatformAdminOverviewView' backend/platform_v2/urls.py; then echo "Scalable platform admin overview endpoint is missing." >&2; exit 1; fi
+if ! grep -q 'PlatformAdminAuditLogView' backend/platform_v2/urls.py || ! grep -q 'PlatformAdminSiteListView' backend/platform_v2/urls.py; then echo "Operational admin site/audit endpoints are missing." >&2; exit 1; fi
 if [[ ! -f backend/platform_v2/access.py ]]; then echo "Central tenant access policy is missing." >&2; exit 1; fi
-if grep -R --line-number --exclude='views.py' -E 'from \.views import (can_admin|can_write|membership_for|user_tenant_ids)' backend/platform_v2; then echo "Backend access policy leaked back into views.py imports." >&2; exit 1; fi
+if grep -q '^def user_tenant_ids\|^def membership_for\|^def can_write\|^def can_admin' backend/platform_v2/views.py; then echo "Access helpers were duplicated back into views.py." >&2; exit 1; fi
+if grep -R --line-number -E 'from \.views import (can_admin|can_write|membership_for|user_tenant_ids)' backend/platform_v2; then echo "Backend access policy leaked back into views.py imports." >&2; exit 1; fi
 if [[ ! -f src/app/error.tsx || ! -f src/app/not-found.tsx ]]; then echo "Frontend error/not-found boundaries are missing." >&2; exit 1; fi
 if [[ ! -f src/modules/i18n/catalog.ts ]]; then echo "UI localization catalog is missing." >&2; exit 1; fi
+if ! grep -q '@/modules/i18n/catalog' src/app/guest/dashboard/guest-dashboard-client.tsx || ! grep -q '@/modules/i18n/catalog' src/app/guest/settings/settings-client.tsx; then echo "Tenant locale is not wired into workspace UI." >&2; exit 1; fi
+if grep -q '/guest/builder?plan=plus' src/app/pricing/page.tsx; then echo "Pricing Free CTA regressed to legacy Plus template." >&2; exit 1; fi
+if [[ ! -f backend/platform_v2/management/commands/prune_analytics_v2.py || ! -f backend/platform_v2/management/commands/verify_pending_domains_v2.py ]]; then echo "Production maintenance commands are missing." >&2; exit 1; fi
 
 printf '\n== QR Business V2: frontend ==\n'
 npm ci
@@ -64,13 +69,16 @@ python manage.py test platform_v2 --verbosity=2
 printf '\n== QR Business V2: optional legacy migration rehearsal ==\n'
 if [[ "${ENABLE_LEGACY_IMPORT:-False}" == "True" ]]; then
   python manage.py test platform_v2.tests.test_legacy_migration --verbosity=2
+  echo "Running rollback-only legacy migration dry-run..."
   python manage.py migrate_legacy_v2
-  if [[ "${VERIFY_LEGACY_PARITY:-False}" == "True" ]]; then
+  if [[ "${APPLY_LEGACY_MIGRATION:-False}" == "True" ]]; then
+    echo "APPLY_LEGACY_MIGRATION=True: applying migration to the currently configured controlled database."
+    python manage.py migrate_legacy_v2 --apply
     python manage.py check_legacy_parity
   else
-    echo "Dry-run completed. Parity is intentionally skipped until an applied migration exists."
-    echo "After: python manage.py migrate_legacy_v2 --apply"
-    echo "Run:   VERIFY_LEGACY_PARITY=True ./scripts/verify-v2.sh"
+    echo "Dry-run completed. Applied migration/parity intentionally skipped."
+    echo "Only on a controlled rehearsal/final migration database, run:"
+    echo "  ENABLE_LEGACY_IMPORT=True APPLY_LEGACY_MIGRATION=True ./scripts/verify-v2.sh"
   fi
 else
   echo "Skipped. Set ENABLE_LEGACY_IMPORT=True only against the controlled migration database."
