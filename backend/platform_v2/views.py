@@ -93,12 +93,14 @@ class SiteViewSet(viewsets.ModelViewSet):
         )
         return filter_tenant_param(queryset, self.request)
 
+    @transaction.atomic
     def perform_create(self, serializer):
-        tenant = serializer.validated_data["tenant"]
+        requested_tenant = serializer.validated_data["tenant"]
+        tenant = Tenant.objects.select_for_update().get(pk=requested_tenant.pk)
         if not can_write(self.request.user, tenant.id):
             raise PermissionDenied("Editor, admin, or owner role required.")
         enforce_site_create(tenant)
-        serializer.save(status=Site.Status.DRAFT)
+        serializer.save(tenant=tenant, status=Site.Status.DRAFT)
 
     def perform_update(self, serializer):
         site = self.get_object()
@@ -150,15 +152,17 @@ class DomainViewSet(viewsets.ModelViewSet):
         queryset = Domain.objects.filter(tenant_id__in=user_tenant_ids(self.request.user)).select_related("tenant", "site").order_by("created_at", "id")
         return filter_tenant_param(queryset, self.request)
 
+    @transaction.atomic
     def perform_create(self, serializer):
-        tenant = serializer.validated_data["tenant"]
+        requested_tenant = serializer.validated_data["tenant"]
+        tenant = Tenant.objects.select_for_update().get(pk=requested_tenant.pk)
         if not can_admin(self.request.user, tenant.id):
             raise PermissionDenied("Owner or admin role required.")
         enforce_custom_domain(tenant)
         site = serializer.validated_data.get("site")
         if site and site.tenant_id != tenant.id:
             raise ValidationError({"site": "Site must belong to the selected tenant."})
-        serializer.save(kind=Domain.Kind.CUSTOM, status=Domain.Status.PENDING)
+        serializer.save(tenant=tenant, kind=Domain.Kind.CUSTOM, status=Domain.Status.PENDING)
 
     @action(detail=True, methods=["get", "post"], url_path="verification")
     def verification(self, request, pk=None):
