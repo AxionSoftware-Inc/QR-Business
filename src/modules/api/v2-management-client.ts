@@ -23,7 +23,40 @@ export type V2Entitlements = {
 export type V2MembershipRow = { id:string; user:number; email:string; name:string; role:"owner"|"admin"|"editor"|"analyst"; is_active:boolean; created_at:string; updated_at:string };
 export type V2TeamInvitation = { id:string; tenant:string; email:string; role:"admin"|"editor"|"analyst"; status:"pending"|"accepted"|"revoked"|"expired"; expires_at:string; invited_by:number|null; accepted_by:number|null; accepted_at:string|null; created_at:string; token?:string };
 
-async function json<T>(path:string, init:RequestInit={}):Promise<T>{ const response=await authorizedV2Fetch(path,init); if(!response.ok){let detail=`Request failed (${response.status})`;try{const body=await response.json() as {detail?:string};if(body.detail)detail=body.detail;}catch{} throw new Error(detail);} if(response.status===204)return undefined as T; return await response.json() as T; }
+export class V2ApiError extends Error {
+  status:number;
+  requestId:string|null;
+  retryAfter:string|null;
+  constructor(message:string,status:number,requestId:string|null,retryAfter:string|null){super(message);this.name="V2ApiError";this.status=status;this.requestId=requestId;this.retryAfter=retryAfter;}
+}
+
+function firstError(value:unknown,prefix=""):string|null{
+  if(typeof value==="string"&&value.trim())return prefix?`${prefix}: ${value}`:value;
+  if(Array.isArray(value)){for(const item of value){const found=firstError(item,prefix);if(found)return found;}return null;}
+  if(value&&typeof value==="object"){
+    const row=value as Record<string,unknown>;
+    if(typeof row.detail==="string"&&row.detail.trim())return row.detail;
+    for(const [key,item] of Object.entries(row)){const found=firstError(item,key==="non_field_errors"?prefix:key);if(found)return found;}
+  }
+  return null;
+}
+
+async function apiError(response:Response,fallback:string){
+  let detail:string|null=null;
+  try{detail=firstError(await response.clone().json());}catch{}
+  if(!detail&&response.status===429)detail="Too many requests. Please try again shortly.";
+  const requestId=response.headers.get("x-request-id");
+  const retryAfter=response.headers.get("retry-after");
+  const suffix=requestId?` [request ${requestId}]`:"";
+  return new V2ApiError(`${detail||fallback}${suffix}`,response.status,requestId,retryAfter);
+}
+
+async function json<T>(path:string, init:RequestInit={}):Promise<T>{
+  const response=await authorizedV2Fetch(path,init);
+  if(!response.ok)throw await apiError(response,`Request failed (${response.status})`);
+  if(response.status===204)return undefined as T;
+  return await response.json() as T;
+}
 async function listJson<T>(path:string):Promise<T[]>{const payload=await json<T[]|V2Page<T>>(path);return Array.isArray(payload)?payload:payload.results;}
 function withTenant(path:string,tenantId?:string){if(!tenantId)return path;const join=path.includes("?")?"&":"?";return `${path}${join}tenant=${encodeURIComponent(tenantId)}`;}
 function withQuery(path:string,params:Record<string,string|number|undefined>){const search=new URLSearchParams();for(const [key,value] of Object.entries(params)){if(value!==undefined&&String(value)!=="")search.set(key,String(value));}const query=search.toString();return query?`${path}?${query}`:path;}
@@ -59,6 +92,19 @@ export const getV2DomainVerification=(domainId:string)=>json<{hostname:string;re
 export const verifyV2Domain=(domainId:string)=>json<{hostname:string;verified:boolean;status:V2Domain["status"];observed:string[]}>(`/api/v2/domains/${domainId}/verification/`,{method:"POST"});
 export function createV2QRCode(input:{tenant:string;site:string;label?:string;campaign?:string}){return json<V2QRCode>("/api/v2/qr-codes/",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(input)});}
 
-export async function uploadV2Image(input:{tenant:string;file:File;alt?:string}){const form=new FormData();form.append("tenant",input.tenant);form.append("file",input.file);if(input.alt)form.append("alt",input.alt);const response=await authorizedV2Fetch("/api/v2/media/",{method:"POST",body:form});if(!response.ok){let detail=`Upload failed (${response.status})`;try{const payload=await response.json() as {detail?:string};if(payload.detail)detail=payload.detail;}catch{}throw new Error(detail);}return await response.json() as V2MediaAsset;}
-export async function fetchV2QRCodeBlob(qrId:string,format:"png"|"svg"="png"){const response=await authorizedV2Fetch(`/api/v2/qr-codes/${qrId}/image/?format=${format}`);if(!response.ok)throw new Error(`QR download failed (${response.status})`);return response.blob();}
-export async function downloadV2QRCode(qr:V2QRCode,siteSlug:string,format:"png"|"svg"){const blob=await fetchV2QRCodeBlob(qr.id,format);const url=URL.createObjectURL(blob);try{const anchor=document.createElement("a");anchor.href=url;anchor.download=`${siteSlug}-qr.${format}`;anchor.click();}finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}}
+export async function uploadV2Image(input:{tenant:string;file:File;alt?:string}){
+  const form=new FormData();form.append("tenant",input.tenant);form.append("file",input.file);if(input.alt)form.append("alt",input.alt);
+  const response=await authorizedV2Fetch("/api/v2/media/",{method:"POST",body:form});
+  if(!response.ok)throw await apiError(response,`Upload failed (${response.status})`);
+  return await response.json() as V2MediaAsset;
+}
+export async function fetchV2QRCodeBlob(qrId:string,format:"png"|"svg"="png"){
+  const response=await authorizedV2Fetch(`/api/v2/qr-codes/${qrId}/image/?format=${format}`);
+  if(!response.ok)throw await apiError(response,`QR download failed (${response.status})`);
+  return response.blob();
+}
+export async function downloadV2QRCode(qr:V2QRCode,siteSlug:string,format:"png"|"svg"){
+  const blob=await fetchV2QRCodeBlob(qr.id,format);const url=URL.createObjectURL(blob);
+  try{const anchor=document.createElement("a");anchor.href=url;anchor.download=`${siteSlug}-qr.${format}`;anchor.click();}
+  finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
+}
