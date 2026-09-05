@@ -46,7 +46,7 @@ export default async function PricingPage() {
         <section className="pb-10 pt-14">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Pricing</p>
           <h1 className="mt-3 max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-5xl">Biznes o‘sishi bilan birga kengayadigan paketlar</h1>
-          <p className="mt-5 max-w-3xl text-base leading-7 text-slate-600 sm:text-lg">Barcha paketlar bir xil V2 platformada ishlaydi: immutable publish, dynamic QR, secure account ownership va tenant isolation. Farq faqat limit va premium imkoniyatlarda.</p>
+          <p className="mt-5 max-w-3xl text-base leading-7 text-slate-600 sm:text-lg">Barcha paketlar bir xil V2 platformada ishlaydi: immutable publish, dynamic QR va workspace isolation. Farq faqat limit va premium imkoniyatlarda.</p>
         </section>
 
         <section className="grid gap-4 pb-8 md:grid-cols-2 xl:grid-cols-4">
@@ -68,7 +68,7 @@ export default async function PricingPage() {
                   <PlanFeature label="Advanced analytics" on={plan.features.advanced_analytics} />
                   <PlanFeature label="Brandingni olib tashlash" on={plan.features.remove_branding} />
                 </div>
-                <Link className={featured ? "mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-white px-5 text-sm font-semibold text-slate-900 hover:bg-slate-100" : "mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 hover:bg-slate-50"} href={plan.key === "free" ? "/guest/builder?plan=plus" : "/login?next=/guest/settings"}>
+                <Link className={featured ? "mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-white px-5 text-sm font-semibold text-slate-900 hover:bg-slate-100" : "mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 hover:bg-slate-50"} href={plan.key === "free" ? "/guest/builder?plan=oddiy" : "/login?next=/guest/settings"}>
                   {plan.key === "free" ? "Bepul boshlash" : `${plan.name} uchun account`}
                 </Link>
               </article>
