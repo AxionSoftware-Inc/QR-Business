@@ -259,6 +259,33 @@ class AnalyticsEvent(models.Model):
         ordering = ["-occurred_at"]
 
 
+class AnalyticsDailyRollup(models.Model):
+    """Long-lived aggregate for compacted raw analytics history."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, related_name="analytics_rollups", on_delete=models.CASCADE)
+    site = models.ForeignKey(Site, related_name="analytics_rollups", on_delete=models.CASCADE)
+    day = models.DateField()
+    event_type = models.CharField(max_length=20, choices=AnalyticsEvent.EventType.choices)
+    target = models.CharField(max_length=80, blank=True)
+    count = models.PositiveBigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "site", "day", "event_type", "target"],
+                name="v2_unique_analytics_daily_rollup",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["tenant", "day"], name="v2_rollup_tenant_day_idx"),
+            models.Index(fields=["site", "event_type", "day"], name="v2_rollup_site_event_day_idx"),
+        ]
+        ordering = ["-day"]
+
+
 class AuditLog(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant = models.ForeignKey(Tenant, related_name="audit_logs", null=True, blank=True, on_delete=models.SET_NULL)
