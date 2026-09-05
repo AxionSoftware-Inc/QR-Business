@@ -1,11 +1,12 @@
 import hashlib
 import secrets
+import warnings
 from io import BytesIO
 from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -25,6 +26,37 @@ ALLOWED_IMAGE_TYPES = {
     "PNG": ("image/png", ".png"),
     "WEBP": ("image/webp", ".webp"),
 }
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+
+
+def sanitize_image(raw):
+    """Decode and re-encode one static image, stripping metadata and trailing payloads."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+        with Image.open(BytesIO(raw)) as source:
+            image_format = str(source.format or "").upper()
+            media = ALLOWED_IMAGE_TYPES.get(image_format)
+            if not media:
+                raise ValueError("Only JPEG, PNG and WebP images are supported.")
+            if getattr(source, "is_animated", False):
+                raise ValueError("Animated images are not supported.")
+            source.load()
+            image = ImageOps.exif_transpose(source)
+            width, height = image.size
+            if width <= 0 or height <= 0 or width > MAX_IMAGE_SIDE or height > MAX_IMAGE_SIDE or width * height > MAX_IMAGE_PIXELS:
+                raise ValueError("Image dimensions are too large.")
+
+            output = BytesIO()
+            if image_format == "JPEG":
+                image.convert("RGB").save(output, format="JPEG", quality=90, optimize=True)
+            elif image_format == "PNG":
+                if image.mode not in {"1", "L", "LA", "P", "RGB", "RGBA"}:
+                    image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+                image.save(output, format="PNG", optimize=True)
+            else:
+                has_alpha = "A" in image.getbands()
+                image.convert("RGBA" if has_alpha else "RGB").save(output, format="WEBP", quality=90, method=4)
+            return output.getvalue(), image_format, width, height, media
 
 
 class MediaAssetViewSet(viewsets.ViewSet):
@@ -71,21 +103,12 @@ class MediaAssetViewSet(viewsets.ViewSet):
             return Response({"detail": "Image exceeds 8 MB."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            with Image.open(BytesIO(raw)) as image:
-                image.verify()
-            with Image.open(BytesIO(raw)) as image:
-                image_format = str(image.format or "").upper()
-                width, height = image.size
-        except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
-            return Response({"detail": "File is not a safe supported image."}, status=status.HTTP_400_BAD_REQUEST)
+            safe_bytes, image_format, width, height, media = sanitize_image(raw)
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning, ValueError) as exc:
+            detail = str(exc) if isinstance(exc, ValueError) else "File is not a safe supported image."
+            return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
 
-        media = ALLOWED_IMAGE_TYPES.get(image_format)
-        if not media:
-            return Response({"detail": "Only JPEG, PNG and WebP images are supported."}, status=status.HTTP_400_BAD_REQUEST)
-        if width <= 0 or height <= 0 or width > MAX_IMAGE_SIDE or height > MAX_IMAGE_SIDE or width * height > MAX_IMAGE_PIXELS:
-            return Response({"detail": "Image dimensions are too large."}, status=status.HTTP_400_BAD_REQUEST)
-
-        digest = hashlib.sha256(raw).hexdigest()
+        digest = hashlib.sha256(safe_bytes).hexdigest()
         existing = MediaAsset.objects.filter(tenant_id=tenant_id, sha256=digest).first()
         if existing:
             return Response(MediaAssetSerializer(existing).data, status=status.HTTP_200_OK)
@@ -93,7 +116,7 @@ class MediaAssetViewSet(viewsets.ViewSet):
         enforce_media_create(tenant)
         content_type, extension = media
         storage_key = f"tenant-media/{tenant_id}/{digest[:2]}/{digest}-{secrets.token_hex(4)}{extension}"
-        saved_key = default_storage.save(storage_key, ContentFile(raw))
+        saved_key = default_storage.save(storage_key, ContentFile(safe_bytes))
         try:
             asset = MediaAsset.objects.create(
                 tenant_id=tenant_id,
@@ -101,7 +124,7 @@ class MediaAssetViewSet(viewsets.ViewSet):
                 storage_key=saved_key,
                 original_name=Path(uploaded.name or "image").name[:255],
                 content_type=content_type,
-                byte_size=len(raw),
+                byte_size=len(safe_bytes),
                 width=width,
                 height=height,
                 sha256=digest,
@@ -113,7 +136,7 @@ class MediaAssetViewSet(viewsets.ViewSet):
                 action="media.created",
                 object_type="media_asset",
                 object_id=str(asset.id),
-                metadata={"content_type": content_type, "byte_size": len(raw), "width": width, "height": height, "sha256": digest},
+                metadata={"content_type": content_type, "byte_size": len(safe_bytes), "width": width, "height": height, "sha256": digest, "sanitized": True},
             )
         except Exception:
             default_storage.delete(saved_key)
@@ -131,6 +154,8 @@ class MediaAssetViewSet(viewsets.ViewSet):
         asset_id = str(asset.id)
         metadata = {"content_type": asset.content_type, "byte_size": asset.byte_size, "sha256": asset.sha256}
         asset.delete()
-        default_storage.delete(storage_key)
-        AuditLog.objects.create(tenant=tenant, actor=request.user, action="media.deleted", object_type="media_asset", object_id=asset_id, metadata=metadata)
+        try:
+            default_storage.delete(storage_key)
+        finally:
+            AuditLog.objects.create(tenant=tenant, actor=request.user, action="media.deleted", object_type="media_asset", object_id=asset_id, metadata=metadata)
         return Response(status=status.HTTP_204_NO_CONTENT)
